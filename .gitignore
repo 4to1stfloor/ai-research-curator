@@ -1,0 +1,37 @@
+# Environment
+.env
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Output files (keep structure, ignore content)
+output/reports/*.pdf
+output/reports/*.html
+output/obsidian/*.md
+!output/reports/.gitkeep
+!output/obsidian/.gitkeep
+
+# Downloaded papers
+data/papers/
+*.pdf
+
+# But keep history file structure
+!data/paper_history.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+.claude/

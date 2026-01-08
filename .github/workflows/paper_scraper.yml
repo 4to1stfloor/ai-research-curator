@@ -1,0 +1,122 @@
+name: Paper Digest
+
+on:
+  # 수요일 오전 9시 (한국 시간) = UTC 0시
+  schedule:
+    - cron: '0 0 * * 3'  # 매주 수요일
+
+  # 수동 실행
+  workflow_dispatch:
+    inputs:
+      max_papers:
+        description: 'Maximum papers to process'
+        required: false
+        default: '5'
+      days_lookback:
+        description: 'Days to look back'
+        required: false
+        default: '7'
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+          # WeasyPrint dependencies
+          sudo apt-get update
+          sudo apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
+
+      - name: Load paper history
+        run: |
+          # History 파일이 없으면 초기화
+          if [ ! -f "data/paper_history.json" ]; then
+            mkdir -p data
+            echo '{"papers": [], "last_updated": null}' > data/paper_history.json
+          fi
+
+      - name: Run paper digest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          PUBMED_EMAIL: ${{ secrets.PUBMED_EMAIL }}
+        run: |
+          MAX_PAPERS=${{ github.event.inputs.max_papers || '5' }}
+          DAYS=${{ github.event.inputs.days_lookback || '7' }}
+
+          python -m src.main \
+            --config config/config.yaml \
+            --max-papers $MAX_PAPERS \
+            --days $DAYS
+
+      - name: Upload PDF report
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-digest-report
+          path: output/reports/*.pdf
+          retention-days: 30
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-digest-html
+          path: output/reports/*.html
+          retention-days: 30
+
+      - name: Upload Obsidian notes
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: obsidian-notes
+          path: output/obsidian/
+          retention-days: 30
+
+      - name: Commit history update
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # 변경사항 확인
+          if git diff --quiet data/paper_history.json; then
+            echo "No changes to commit"
+          else
+            git add data/paper_history.json
+            git commit -m "Update paper history - $(date +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Paper Digest Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Date: $(date +%Y-%m-%d)" >> $GITHUB_STEP_SUMMARY
+          echo "- Reports generated in artifacts" >> $GITHUB_STEP_SUMMARY
+
+  # 월간 실행 (선택적)
+  # monthly:
+  #   runs-on: ubuntu-latest
+  #   if: github.event.schedule == '0 0 1 * *'  # 매월 1일
+  #   steps:
+  #     ...

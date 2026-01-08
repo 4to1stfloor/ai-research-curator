@@ -1,0 +1,97 @@
+# Automatic Paper Scraping Configuration
+# =======================================
+
+# 검색 설정
+search:
+  # 사용할 검색 소스 (pubmed, rss, biorxiv)
+  sources:
+    - pubmed
+    - rss
+    - biorxiv
+
+  # 검색할 저널 목록
+  journals:
+    - Cell
+    - Nature
+    - Science
+    - Nature Methods
+    - Nature Biotechnology
+    - Nature Medicine
+    - Cancer Cell
+    - Cell Systems
+    - Genome Biology
+    - Nucleic Acids Research
+
+  # 검색 키워드 (OR 조건으로 검색)
+  keywords:
+    - single-cell RNA-seq
+    - scRNA-seq
+    - spatial transcriptomics
+    - cancer genomics
+    - tumor microenvironment
+    - machine learning
+    - deep learning
+    - artificial intelligence
+    - bioinformatics
+
+  # 가져올 최대 논문 수
+  max_papers: 5
+
+  # 검색할 기간 (일 단위)
+  days_lookback: 7
+
+# 스케줄 설정 (GitHub Actions용)
+schedule:
+  # 실행 주기: weekly 또는 monthly
+  frequency: weekly
+  # weekly인 경우 실행 요일
+  day: wednesday
+
+# AI 설정
+ai:
+  # LLM 제공자: claude 또는 openai
+  llm_provider: claude
+
+  # 요약 언어
+  summarize_language: korean
+
+  # Abstract 영-한 번역 여부
+  translate_abstract: true
+
+  # AI 요약 그림 생성 여부
+  generate_summary_image: true
+
+  # Claude 모델 설정
+  claude:
+    model: claude-sonnet-4-20250514
+    max_tokens: 4096
+
+  # OpenAI 모델 설정
+  openai:
+    model: gpt-4-turbo-preview
+    max_tokens: 4096
+
+  # Gemini 설정 (이미지 생성용)
+  gemini:
+    model: gemini-2.0-flash-exp
+
+# 출력 설정
+output:
+  # PDF 리포트 생성 여부
+  pdf_report: true
+
+  # Obsidian 출력 설정
+  obsidian:
+    enabled: true
+    vault_path: ./output/obsidian
+
+  # PDF 리포트 출력 경로
+  reports_path: ./output/reports
+
+# 저장소 설정
+storage:
+  # 논문 이력 파일 경로
+  history_file: ./data/paper_history.json
+
+  # 다운로드한 PDF 저장 경로
+  papers_dir: ./data/papers
