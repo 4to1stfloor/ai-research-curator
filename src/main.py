@@ -114,6 +114,14 @@ class PaperDigestPipeline:
                     provider="ollama",
                     ollama_config=self.config.ai.ollama.model_dump()
                 )
+            elif provider == "gemini":
+                if not self.env_config.google_api_key:
+                    raise ValueError("GOOGLE_API_KEY required for Gemini")
+                self._llm_client = LLMClient.from_config(
+                    provider="gemini",
+                    google_key=self.env_config.google_api_key,
+                    gemini_config=self.config.ai.gemini.model_dump()
+                )
             else:
                 raise ValueError(f"Unknown LLM provider: {provider}")
 
@@ -464,12 +472,17 @@ def main(config, max_papers, days, no_pdf, no_obsidian, dry_run):
         if no_obsidian:
             app_config.output.obsidian.enabled = False
 
-        # Check API keys (skip for dry-run and ollama)
-        if not dry_run and app_config.ai.llm_provider != "ollama":
-            if not env_config.anthropic_api_key and not env_config.openai_api_key:
-                console.print("[red]Error: No LLM API key found![/red]")
-                console.print("Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env file")
-                console.print("Or use --provider ollama for local LLM")
+        # Check API keys (skip for dry-run, ollama)
+        if not dry_run and app_config.ai.llm_provider not in ("ollama",):
+            provider = app_config.ai.llm_provider
+            if provider == "claude" and not env_config.anthropic_api_key:
+                console.print("[red]Error: ANTHROPIC_API_KEY required for Claude![/red]")
+                sys.exit(1)
+            elif provider == "openai" and not env_config.openai_api_key:
+                console.print("[red]Error: OPENAI_API_KEY required for OpenAI![/red]")
+                sys.exit(1)
+            elif provider == "gemini" and not env_config.google_api_key:
+                console.print("[red]Error: GOOGLE_API_KEY required for Gemini![/red]")
                 sys.exit(1)
 
         # Initialize and run pipeline

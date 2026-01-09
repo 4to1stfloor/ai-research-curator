@@ -49,7 +49,7 @@ schedule:
 
 # AI 설정
 ai:
-  # LLM 제공자: ollama, claude, openai
+  # LLM 제공자: gemini, ollama, claude, openai
   llm_provider: ollama
 
   # 요약 언어
@@ -58,12 +58,12 @@ ai:
   # Abstract 영-한 번역 여부
   translate_abstract: true
 
-  # AI 요약 그림 생성 여부 (Ollama에서는 false 권장)
-  generate_summary_image: false
+  # AI 요약 그림 생성 여부
+  generate_summary_image: true
 
   # Ollama 설정 (로컬 LLM, 무료)
   ollama:
-    model: llama3.1    # llama3.1, mistral, gemma2 등
+    model: llama3.3:70b    # llama3.3:70b, qwen2.5:32b 등
     base_url: http://localhost:11434
     max_tokens: 4096
 
@@ -79,7 +79,7 @@ ai:
 
   # Gemini 설정 (이미지 생성용)
   gemini:
-    model: gemini-2.0-flash-exp
+    model: gemini-2.5-flash
 
 # 출력 설정
 output:

@@ -1,4 +1,4 @@
-"""Unified LLM client for Claude, OpenAI, and Ollama."""
+"""Unified LLM client for Claude, OpenAI, Ollama, and Gemini."""
 
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -13,6 +13,45 @@ class BaseLLMClient(ABC):
     def generate(self, prompt: str, system: Optional[str] = None) -> str:
         """Generate text from prompt."""
         pass
+
+
+class GeminiClient(BaseLLMClient):
+    """Google Gemini API client."""
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gemini-2.5-flash",
+        max_tokens: int = 8192
+    ):
+        """
+        Initialize Gemini client.
+
+        Args:
+            api_key: Google API key
+            model: Model to use
+            max_tokens: Maximum tokens to generate
+        """
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel(model)
+        self.max_tokens = max_tokens
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=30))
+    def generate(self, prompt: str, system: Optional[str] = None) -> str:
+        """Generate text using Gemini."""
+        full_prompt = prompt
+        if system:
+            full_prompt = f"{system}\n\n{prompt}"
+
+        response = self.model.generate_content(
+            full_prompt,
+            generation_config={
+                "max_output_tokens": self.max_tokens,
+                "temperature": 0.7,
+            }
+        )
+        return response.text
 
 
 class OllamaClient(BaseLLMClient):
@@ -179,6 +218,12 @@ class LLMClient:
                 base_url=base_url or "http://localhost:11434",
                 max_tokens=max_tokens
             )
+        elif provider == "gemini":
+            self._client = GeminiClient(
+                api_key=api_key,
+                model=model or "gemini-2.5-flash",
+                max_tokens=max_tokens
+            )
         else:
             raise ValueError(f"Unknown provider: {provider}")
 
@@ -192,20 +237,24 @@ class LLMClient:
         provider: str,
         anthropic_key: Optional[str] = None,
         openai_key: Optional[str] = None,
+        google_key: Optional[str] = None,
         claude_config: Optional[dict] = None,
         openai_config: Optional[dict] = None,
-        ollama_config: Optional[dict] = None
+        ollama_config: Optional[dict] = None,
+        gemini_config: Optional[dict] = None
     ) -> "LLMClient":
         """
         Create LLM client from configuration.
 
         Args:
-            provider: "claude", "openai", or "ollama"
+            provider: "claude", "openai", "ollama", or "gemini"
             anthropic_key: Anthropic API key
             openai_key: OpenAI API key
+            google_key: Google API key
             claude_config: Claude configuration dict
             openai_config: OpenAI configuration dict
             ollama_config: Ollama configuration dict
+            gemini_config: Gemini configuration dict
 
         Returns:
             Configured LLMClient
@@ -237,6 +286,16 @@ class LLMClient:
                 model=config.get("model", "llama3.1"),
                 max_tokens=config.get("max_tokens", 4096),
                 base_url=config.get("base_url", "http://localhost:11434")
+            )
+        elif provider == "gemini":
+            if not google_key:
+                raise ValueError("GOOGLE_API_KEY required for Gemini")
+            config = gemini_config or {}
+            return cls(
+                provider="gemini",
+                api_key=google_key,
+                model=config.get("model", "gemini-2.5-flash"),
+                max_tokens=config.get("max_tokens", 8192)
             )
         else:
             raise ValueError(f"Unknown provider: {provider}")
