@@ -164,7 +164,7 @@ class BioRxivSearcher:
                 # Check if more results
                 messages = response.get("messages", [])
                 if messages:
-                    total = messages[0].get("total", 0)
+                    total = int(messages[0].get("total", 0))
                     if cursor + len(collection) >= total:
                         break
 

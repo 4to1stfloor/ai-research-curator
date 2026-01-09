@@ -457,11 +457,12 @@ def main(config, max_papers, days, no_pdf, no_obsidian, dry_run):
         if no_obsidian:
             app_config.output.obsidian.enabled = False
 
-        # Check API keys
-        if not env_config.anthropic_api_key and not env_config.openai_api_key:
-            console.print("[red]Error: No LLM API key found![/red]")
-            console.print("Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env file")
-            sys.exit(1)
+        # Check API keys (skip for dry-run)
+        if not dry_run:
+            if not env_config.anthropic_api_key and not env_config.openai_api_key:
+                console.print("[red]Error: No LLM API key found![/red]")
+                console.print("Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env file")
+                sys.exit(1)
 
         # Initialize and run pipeline
         base_dir = config_path.parent.parent  # Assume config is in config/
