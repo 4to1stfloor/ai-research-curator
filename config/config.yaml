@@ -49,8 +49,8 @@ schedule:
 
 # AI 설정
 ai:
-  # LLM 제공자: claude 또는 openai
-  llm_provider: claude
+  # LLM 제공자: ollama, claude, openai
+  llm_provider: ollama
 
   # 요약 언어
   summarize_language: korean
@@ -58,8 +58,14 @@ ai:
   # Abstract 영-한 번역 여부
   translate_abstract: true
 
-  # AI 요약 그림 생성 여부
-  generate_summary_image: true
+  # AI 요약 그림 생성 여부 (Ollama에서는 false 권장)
+  generate_summary_image: false
+
+  # Ollama 설정 (로컬 LLM, 무료)
+  ollama:
+    model: llama3.1    # llama3.1, mistral, gemma2 등
+    base_url: http://localhost:11434
+    max_tokens: 4096
 
   # Claude 모델 설정
   claude:

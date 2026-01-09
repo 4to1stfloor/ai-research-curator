@@ -101,7 +101,7 @@ class PaperDigestPipeline:
                     anthropic_key=self.env_config.anthropic_api_key,
                     claude_config=self.config.ai.claude.model_dump()
                 )
-            else:
+            elif provider == "openai":
                 if not self.env_config.openai_api_key:
                     raise ValueError("OPENAI_API_KEY required for OpenAI")
                 self._llm_client = LLMClient.from_config(
@@ -109,6 +109,13 @@ class PaperDigestPipeline:
                     openai_key=self.env_config.openai_api_key,
                     openai_config=self.config.ai.openai.model_dump()
                 )
+            elif provider == "ollama":
+                self._llm_client = LLMClient.from_config(
+                    provider="ollama",
+                    ollama_config=self.config.ai.ollama.model_dump()
+                )
+            else:
+                raise ValueError(f"Unknown LLM provider: {provider}")
 
         return self._llm_client
 
@@ -457,11 +464,12 @@ def main(config, max_papers, days, no_pdf, no_obsidian, dry_run):
         if no_obsidian:
             app_config.output.obsidian.enabled = False
 
-        # Check API keys (skip for dry-run)
-        if not dry_run:
+        # Check API keys (skip for dry-run and ollama)
+        if not dry_run and app_config.ai.llm_provider != "ollama":
             if not env_config.anthropic_api_key and not env_config.openai_api_key:
                 console.print("[red]Error: No LLM API key found![/red]")
                 console.print("Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env file")
+                console.print("Or use --provider ollama for local LLM")
                 sys.exit(1)
 
         # Initialize and run pipeline

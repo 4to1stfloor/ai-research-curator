@@ -51,15 +51,23 @@ class GeminiConfig(BaseModel):
     model: str = "gemini-2.0-flash-exp"
 
 
+class OllamaConfig(BaseModel):
+    """Ollama local LLM configuration."""
+    model: str = "llama3.1"
+    base_url: str = "http://localhost:11434"
+    max_tokens: int = 4096
+
+
 class AIConfig(BaseModel):
     """AI configuration."""
-    llm_provider: str = "claude"  # claude, openai
+    llm_provider: str = "ollama"  # claude, openai, ollama
     summarize_language: str = "korean"
     translate_abstract: bool = True
-    generate_summary_image: bool = True
+    generate_summary_image: bool = False  # Disable by default for Ollama
     claude: ClaudeConfig = Field(default_factory=ClaudeConfig)
     openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
     gemini: GeminiConfig = Field(default_factory=GeminiConfig)
+    ollama: OllamaConfig = Field(default_factory=OllamaConfig)
 
 
 class ObsidianConfig(BaseModel):

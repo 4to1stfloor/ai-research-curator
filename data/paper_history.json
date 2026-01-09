@@ -1,4 +1,10 @@
 {
-  "papers": [],
-  "last_updated": null
+  "papers": [
+    {
+      "doi": "10.1126/science.adt0559",
+      "title": "IDH-mutant gliomas arise from glial progenitor cells harboring the initial driver mutation.",
+      "added_date": "2026-01-09T09:24:23.691716"
+    }
+  ],
+  "last_updated": "2026-01-09T09:24:23.692249"
 }
