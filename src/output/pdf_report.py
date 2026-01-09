@@ -233,7 +233,7 @@ PAPER_SECTION_TEMPLATE = """
 
     {figures_section}
 
-    {diagram_section}
+    {figure_explanation_section}
 </div>
 """
 
@@ -252,23 +252,58 @@ class PDFReportGenerator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def _format_summary(self, summary: str) -> str:
-        """Format summary for HTML."""
+        """Format summary for HTML with proper markdown conversion."""
+        import re
+
         # Convert markdown-like formatting to HTML
         lines = summary.split('\n')
         html_lines = []
+        in_list = False
 
         for line in lines:
             line = line.strip()
+
+            # Convert inline **bold** to <strong>
+            line = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', line)
+
+            # Convert inline *italic* to <em>
+            line = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', line)
+
             if not line:
+                if in_list:
+                    html_lines.append('</ul>')
+                    in_list = False
                 html_lines.append('<br>')
             elif line.startswith('### '):
+                if in_list:
+                    html_lines.append('</ul>')
+                    in_list = False
                 html_lines.append(f'<h4>{line[4:]}</h4>')
+            elif line.startswith('## '):
+                if in_list:
+                    html_lines.append('</ul>')
+                    in_list = False
+                html_lines.append(f'<h3>{line[3:]}</h3>')
             elif line.startswith('- '):
+                if not in_list:
+                    html_lines.append('<ul>')
+                    in_list = True
                 html_lines.append(f'<li>{line[2:]}</li>')
-            elif line.startswith('**') and line.endswith('**'):
-                html_lines.append(f'<strong>{line[2:-2]}</strong>')
+            elif re.match(r'^\d+\.', line):
+                # Numbered list
+                if not in_list:
+                    html_lines.append('<ol>')
+                    in_list = True
+                content = re.sub(r'^\d+\.\s*', '', line)
+                html_lines.append(f'<li>{content}</li>')
             else:
+                if in_list:
+                    html_lines.append('</ul>')
+                    in_list = False
                 html_lines.append(f'<p>{line}</p>')
+
+        if in_list:
+            html_lines.append('</ul>')
 
         return '\n'.join(html_lines)
 
@@ -314,48 +349,32 @@ class PDFReportGenerator:
         html_parts.append('</div>')
         return '\n'.join(html_parts)
 
-    def _format_diagram(self, diagram_path: Optional[str], mermaid_code: Optional[str]) -> str:
-        """Format diagram for HTML."""
-        if not diagram_path and not mermaid_code:
+    def _format_figure_explanation(self, explanation: Optional[str]) -> str:
+        """Format figure explanation for HTML."""
+        if not explanation:
             return ""
 
-        html_parts = ['<h3>🔀 연구 흐름도</h3>', '<div class="diagram">']
-
-        if diagram_path and Path(diagram_path).exists():
-            # Embed SVG or image
-            try:
-                with open(diagram_path, 'rb') as f:
-                    if diagram_path.endswith('.svg'):
-                        svg_content = f.read().decode()
-                        html_parts.append(svg_content)
-                    else:
-                        img_data = base64.b64encode(f.read()).decode()
-                        html_parts.append(f'<img src="data:image/png;base64,{img_data}" alt="Diagram">')
-            except Exception as e:
-                print(f"Error embedding diagram: {e}")
-        elif mermaid_code:
-            # Include mermaid code (won't render in static PDF, but useful for reference)
-            html_parts.append(f'<pre><code class="mermaid">{mermaid_code}</code></pre>')
-
+        html_parts = ['<h3>🔍 Figure 해설</h3>', '<div class="figure-explanation">']
+        html_parts.append(self._format_summary(explanation))
         html_parts.append('</div>')
         return '\n'.join(html_parts)
 
     def generate_html(
         self,
         processed_papers: list[ProcessedPaper],
-        diagrams: Optional[dict] = None
+        figure_explanations: Optional[dict] = None
     ) -> str:
         """
         Generate HTML report.
 
         Args:
             processed_papers: List of processed papers
-            diagrams: Optional dict of {paper_id: diagram_info}
+            figure_explanations: Optional dict of {paper_id: figure_explanation}
 
         Returns:
             HTML string
         """
-        diagrams = diagrams or {}
+        figure_explanations = figure_explanations or {}
         date_str = datetime.now().strftime("%Y년 %m월 %d일")
 
         # Generate TOC
@@ -370,8 +389,8 @@ class PDFReportGenerator:
             paper = pp.paper
             paper_id = paper.doi or paper.title
 
-            # Get diagram info
-            diagram_info = diagrams.get(paper_id, {})
+            # Get figure explanation
+            fig_explanation = figure_explanations.get(paper_id, "")
 
             section = PAPER_SECTION_TEMPLATE.format(
                 index=i,
@@ -383,10 +402,7 @@ class PDFReportGenerator:
                 summary=self._format_summary(pp.summary_korean),
                 translation=self._format_translation(pp.abstract_translation),
                 figures_section=self._format_figures(pp.figures),
-                diagram_section=self._format_diagram(
-                    diagram_info.get('svg_path'),
-                    diagram_info.get('mermaid_code')
-                )
+                figure_explanation_section=self._format_figure_explanation(fig_explanation)
             )
             paper_sections.append(section)
 
@@ -403,7 +419,7 @@ class PDFReportGenerator:
     def generate_pdf(
         self,
         processed_papers: list[ProcessedPaper],
-        diagrams: Optional[dict] = None,
+        figure_explanations: Optional[dict] = None,
         filename: Optional[str] = None
     ) -> str:
         """
@@ -411,7 +427,7 @@ class PDFReportGenerator:
 
         Args:
             processed_papers: List of processed papers
-            diagrams: Optional dict of {paper_id: diagram_info}
+            figure_explanations: Optional dict of {paper_id: figure_explanation}
             filename: Optional filename (default: paper_digest_YYYYMMDD.pdf)
 
         Returns:
@@ -420,7 +436,7 @@ class PDFReportGenerator:
         from weasyprint import HTML
 
         # Generate HTML
-        html_content = self.generate_html(processed_papers, diagrams)
+        html_content = self.generate_html(processed_papers, figure_explanations)
 
         # Generate filename
         if not filename:
@@ -438,7 +454,7 @@ class PDFReportGenerator:
     def generate_html_file(
         self,
         processed_papers: list[ProcessedPaper],
-        diagrams: Optional[dict] = None,
+        figure_explanations: Optional[dict] = None,
         filename: Optional[str] = None
     ) -> str:
         """
@@ -446,13 +462,13 @@ class PDFReportGenerator:
 
         Args:
             processed_papers: List of processed papers
-            diagrams: Optional dict of {paper_id: diagram_info}
+            figure_explanations: Optional dict of {paper_id: figure_explanation}
             filename: Optional filename
 
         Returns:
             Path to generated HTML
         """
-        html_content = self.generate_html(processed_papers, diagrams)
+        html_content = self.generate_html(processed_papers, figure_explanations)
 
         if not filename:
             date_str = datetime.now().strftime("%Y%m%d")

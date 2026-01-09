@@ -20,9 +20,8 @@ from .paper.deduplication import DeduplicationChecker
 from .paper.downloader import PaperDownloader
 from .paper.parser import PDFParser
 from .ai.llm_client import LLMClient
-from .ai.summarizer import PaperSummarizer
+from .ai.summarizer import PaperSummarizer, FigureExplanationGenerator
 from .ai.translator import AbstractTranslator
-from .ai.image_gen import DiagramGenerator, SummaryImageGenerator
 from .output.pdf_report import PDFReportGenerator
 from .output.obsidian import ObsidianExporter
 
@@ -74,8 +73,7 @@ class PaperDigestPipeline:
         self._llm_client = None
         self._summarizer = None
         self._translator = None
-        self._diagram_gen = None
-        self._image_gen = None
+        self._figure_explanation_gen = None
 
         # Output
         reports_path = resolve_path(self.config.output.reports_path, self.base_dir)
@@ -140,22 +138,10 @@ class PaperDigestPipeline:
         return self._translator
 
     @property
-    def diagram_generator(self) -> DiagramGenerator:
-        if self._diagram_gen is None:
-            diagrams_dir = resolve_path("./output/diagrams", self.base_dir)
-            self._diagram_gen = DiagramGenerator(self.llm_client, diagrams_dir)
-        return self._diagram_gen
-
-    @property
-    def image_generator(self) -> Optional[SummaryImageGenerator]:
-        if self._image_gen is None and self.env_config.google_api_key:
-            images_dir = resolve_path("./output/images", self.base_dir)
-            self._image_gen = SummaryImageGenerator(
-                self.env_config.google_api_key,
-                self.config.ai.gemini.model,
-                images_dir
-            )
-        return self._image_gen
+    def figure_explanation_generator(self) -> FigureExplanationGenerator:
+        if self._figure_explanation_gen is None:
+            self._figure_explanation_gen = FigureExplanationGenerator(self.llm_client)
+        return self._figure_explanation_gen
 
     def search_papers(self) -> list[Paper]:
         """Search for papers from all configured sources."""
@@ -237,9 +223,14 @@ class PaperDigestPipeline:
         console.print(f"[green]Downloaded {len([p for p in downloaded if p.local_pdf_path])} PDFs[/green]")
         return downloaded
 
-    def process_papers(self, papers: list[Paper]) -> list[ProcessedPaper]:
-        """Process papers with AI (summarize, translate)."""
+    def process_papers(self, papers: list[Paper]) -> tuple[list[ProcessedPaper], dict]:
+        """Process papers with AI (summarize, translate).
+
+        Returns:
+            Tuple of (processed_papers, body_texts_dict)
+        """
         processed = []
+        body_texts = {}
 
         with Progress(
             SpinnerColumn(),
@@ -261,6 +252,10 @@ class PaperDigestPipeline:
                         parsed = self.pdf_parser.parse_paper(paper)
                         body_text = parsed.get("text", "")
                         figures = parsed.get("figures", [])
+
+                    # Store body text for figure explanation
+                    paper_id = paper.doi or paper.title
+                    body_texts[paper_id] = body_text
 
                     # Summarize
                     summary = self.summarizer.summarize(paper, body_text)
@@ -291,35 +286,50 @@ class PaperDigestPipeline:
 
                 progress.update(task, completed=True)
 
-        return processed
+        return processed, body_texts
 
-    def generate_diagrams(self, processed_papers: list[ProcessedPaper]) -> dict:
-        """Generate diagrams for papers."""
-        diagrams = {}
+    def generate_figure_explanations(
+        self,
+        processed_papers: list[ProcessedPaper],
+        body_texts: dict
+    ) -> dict:
+        """Generate figure explanations for papers."""
+        explanations = {}
 
         if not self.config.ai.generate_summary_image:
-            return diagrams
+            return explanations
 
-        console.print("[cyan]Generating diagrams...[/cyan]")
+        console.print("[cyan]Generating figure explanations...[/cyan]")
 
         for pp in processed_papers:
             paper_id = pp.paper.doi or pp.paper.title
             try:
-                diagram_info = self.diagram_generator.generate_diagram(
+                # Extract figure legends from body text
+                body_text = body_texts.get(paper_id, "")
+                legends = self.figure_explanation_generator.extract_figure_legends(body_text)
+
+                # Combine legends for explanation
+                legend_text = "\n".join([
+                    f"Figure {l['figure_num']}: {l['legend']}"
+                    for l in legends
+                ]) if legends else ""
+
+                # Generate explanation
+                explanation = self.figure_explanation_generator.generate_explanation(
                     pp.paper,
                     pp.summary_korean,
-                    render_svg=False  # SVG rendering requires mmdc
+                    legend_text
                 )
-                diagrams[paper_id] = diagram_info
+                explanations[paper_id] = explanation
             except Exception as e:
-                console.print(f"[yellow]Diagram error: {e}[/yellow]")
+                console.print(f"[yellow]Figure explanation error: {e}[/yellow]")
 
-        return diagrams
+        return explanations
 
     def generate_output(
         self,
         processed_papers: list[ProcessedPaper],
-        diagrams: dict
+        figure_explanations: dict
     ) -> dict:
         """Generate output files (PDF, Obsidian)."""
         result = {}
@@ -328,14 +338,14 @@ class PaperDigestPipeline:
         if self.config.output.pdf_report:
             console.print("[cyan]Generating PDF report...[/cyan]")
             try:
-                pdf_path = self.pdf_generator.generate_pdf(processed_papers, diagrams)
+                pdf_path = self.pdf_generator.generate_pdf(processed_papers, figure_explanations)
                 result["pdf"] = pdf_path
                 console.print(f"[green]PDF: {pdf_path}[/green]")
             except Exception as e:
                 console.print(f"[red]PDF error: {e}[/red]")
                 # Fallback to HTML
                 try:
-                    html_path = self.pdf_generator.generate_html_file(processed_papers, diagrams)
+                    html_path = self.pdf_generator.generate_html_file(processed_papers, figure_explanations)
                     result["html"] = html_path
                     console.print(f"[yellow]HTML fallback: {html_path}[/yellow]")
                 except Exception as e2:
@@ -347,7 +357,7 @@ class PaperDigestPipeline:
             try:
                 obsidian_result = self.obsidian_exporter.export_all(
                     processed_papers,
-                    diagrams,
+                    figure_explanations,
                     create_digest=True
                 )
                 result["obsidian"] = obsidian_result
@@ -393,13 +403,13 @@ class PaperDigestPipeline:
         papers = self.download_papers(papers)
 
         # 4. Process with AI
-        processed = self.process_papers(papers)
+        processed, body_texts = self.process_papers(papers)
 
-        # 5. Generate diagrams
-        diagrams = self.generate_diagrams(processed)
+        # 5. Generate figure explanations
+        figure_explanations = self.generate_figure_explanations(processed, body_texts)
 
         # 6. Generate output
-        output = self.generate_output(processed, diagrams)
+        output = self.generate_output(processed, figure_explanations)
 
         # 7. Save to history
         self.save_to_history(papers)

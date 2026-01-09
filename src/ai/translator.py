@@ -9,8 +9,17 @@ from ..models import Paper
 
 TRANSLATION_SYSTEM_PROMPT = """당신은 생물정보학(bioinformatics), 암 연구(cancer research), 인공지능(AI/ML) 분야 전문 번역가입니다.
 학술 논문의 abstract를 문장 단위로 정확하고 자연스럽게 한국어로 번역해주세요.
-전문 용어는 적절한 한국어 번역과 함께 영어 원어를 괄호 안에 병기하세요.
-과학적 정확성을 유지하면서 읽기 쉬운 한국어로 번역해주세요."""
+
+**절대 준수 규칙:**
+1. 전문 용어는 영어 원문 그대로 사용:
+   - "single-cell RNA-seq를 사용하여", "spatial transcriptomics 데이터", "contrastive learning 기반"
+
+2. 한자(漢字)와 다른 언어 절대 금지:
+   - 금지: 高, 展示, 混合, 能力 등 한자
+   - 반드시 순수 한글(가나다...)과 영어(ABC...)만 사용
+   - "고해상도" (O), "高해상도" (X)
+
+3. 유전자명, 단백질명, 알고리즘명은 영어 원문 그대로: p53, BRCA1, UMAP, t-SNE"""
 
 TRANSLATION_PROMPT_TEMPLATE = """다음 영어 논문 abstract를 문장 단위로 한국어로 번역해주세요.
 
@@ -28,11 +37,11 @@ TRANSLATION_PROMPT_TEMPLATE = """다음 영어 논문 abstract를 문장 단위�
 4. "e.g.", "i.e.", "et al.", "vs." 등의 약어 뒤 마침표는 문장 끝이 아님
 
 **번역 규칙:**
-1. 전문 용어: "단일세포 RNA 시퀀싱(single-cell RNA-seq)" 형식
-2. 약어는 처음 등장 시 풀어서 설명: "IDH(isocitrate dehydrogenase, 이소시트르산 탈수소효소)"
-3. 유전자명, 단백질명 등은 원어 그대로: "p53 유전자", "BRCA1 돌연변이"
-4. 통계 수치와 p-value는 원문 그대로 유지
-5. 자연스러운 한국어 문장이 되도록 의역 가능 (의미 왜곡 금지)
+1. 전문 용어는 영어 원문 그대로 사용: "single-cell RNA-seq", "spatial transcriptomics"
+2. 유전자명, 단백질명, 알고리즘명은 영어 원문 그대로: "p53", "BRCA1", "random forest"
+3. 통계 수치와 p-value는 원문 그대로 유지
+4. 자연스러운 한국어 문장이 되도록 의역 가능 (의미 왜곡 금지)
+5. 절대로 한자(中文/日本語)를 사용하지 마세요
 
 ## 출력 형식 (정확히 따라주세요)
 

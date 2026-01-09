@@ -51,9 +51,9 @@ type: paper
 
 ---
 
-## 🔀 연구 흐름도
+## 🔍 Figure 해설
 
-{diagram}
+{figure_explanation}
 
 ---
 
@@ -210,20 +210,19 @@ class ObsidianExporter:
     def export_paper(
         self,
         processed_paper: ProcessedPaper,
-        diagram_info: Optional[dict] = None
+        figure_explanation: Optional[str] = None
     ) -> str:
         """
         Export a single paper to Obsidian note.
 
         Args:
             processed_paper: Processed paper
-            diagram_info: Optional diagram information
+            figure_explanation: Optional figure explanation text
 
         Returns:
             Path to created note
         """
         paper = processed_paper.paper
-        diagram_info = diagram_info or {}
 
         # Create filename
         filename = self._sanitize_filename(paper.title) + ".md"
@@ -233,10 +232,8 @@ class ObsidianExporter:
         pub_date = paper.publication_date.strftime("%Y-%m-%d") if paper.publication_date else "unknown"
         doi_url = f"https://doi.org/{paper.doi}" if paper.doi else paper.url
 
-        # Format diagram
-        diagram_content = "*다이어그램 없음*"
-        if diagram_info.get('mermaid_code'):
-            diagram_content = f"```mermaid\n{diagram_info['mermaid_code']}\n```"
+        # Format figure explanation
+        fig_explanation_content = figure_explanation or "*Figure 해설 없음*"
 
         content = PAPER_NOTE_TEMPLATE.format(
             title=paper.title.replace('"', '\\"'),
@@ -253,7 +250,7 @@ class ObsidianExporter:
             summary=processed_paper.summary_korean,
             translation=self._format_translation_md(processed_paper.abstract_translation),
             figures=self._format_figures_md(processed_paper.figures, paper.doi or paper.title),
-            diagram=diagram_content
+            figure_explanation=fig_explanation_content
         )
 
         # Write file
@@ -265,20 +262,17 @@ class ObsidianExporter:
 
     def export_daily_digest(
         self,
-        processed_papers: list[ProcessedPaper],
-        diagrams: Optional[dict] = None
+        processed_papers: list[ProcessedPaper]
     ) -> str:
         """
         Export daily digest note.
 
         Args:
             processed_papers: List of processed papers
-            diagrams: Optional dict of {paper_id: diagram_info}
 
         Returns:
             Path to created digest note
         """
-        diagrams = diagrams or {}
         now = datetime.now()
 
         # Create filename
@@ -328,7 +322,7 @@ class ObsidianExporter:
     def export_all(
         self,
         processed_papers: list[ProcessedPaper],
-        diagrams: Optional[dict] = None,
+        figure_explanations: Optional[dict] = None,
         create_digest: bool = True
     ) -> dict:
         """
@@ -336,25 +330,25 @@ class ObsidianExporter:
 
         Args:
             processed_papers: List of processed papers
-            diagrams: Optional dict of {paper_id: diagram_info}
+            figure_explanations: Optional dict of {paper_id: figure_explanation}
             create_digest: Whether to create daily digest
 
         Returns:
             Dict with paper_paths and digest_path
         """
-        diagrams = diagrams or {}
+        figure_explanations = figure_explanations or {}
         result = {"paper_paths": [], "digest_path": None}
 
         # Export individual papers
         for pp in processed_papers:
             paper_id = pp.paper.doi or pp.paper.title
-            diagram_info = diagrams.get(paper_id)
+            fig_explanation = figure_explanations.get(paper_id, "")
 
-            path = self.export_paper(pp, diagram_info)
+            path = self.export_paper(pp, fig_explanation)
             result["paper_paths"].append(path)
 
         # Create digest
         if create_digest:
-            result["digest_path"] = self.export_daily_digest(processed_papers, diagrams)
+            result["digest_path"] = self.export_daily_digest(processed_papers)
 
         return result
