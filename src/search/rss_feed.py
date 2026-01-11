@@ -77,8 +77,9 @@ class RSSFeedSearcher:
                 abstract = entry["summary"]
             elif "description" in entry:
                 abstract = entry["description"]
-            # Clean HTML tags
+            # Clean HTML tags and RSS metadata
             abstract = self._strip_html(abstract)
+            abstract = self._clean_abstract(abstract, journal)
 
             # Authors
             authors = []
@@ -113,6 +114,34 @@ class RSSFeedSearcher:
         clean = re.sub(r'<[^>]+>', '', text)
         clean = re.sub(r'\s+', ' ', clean)
         return clean.strip()
+
+    def _clean_abstract(self, abstract: str, journal: str) -> str:
+        """Clean abstract by removing RSS metadata."""
+        import re
+
+        # Remove common RSS metadata patterns
+        # Pattern: "Journal Name, Published online: DD Month YYYY; doi:..."
+        abstract = re.sub(
+            r'^[A-Za-z\s]+,\s*Published\s+online:\s*\d+\s+\w+\s+\d+;\s*doi:[^\s]+',
+            '',
+            abstract
+        )
+
+        # Pattern: "Nature Biotechnology, doi:10.1038/..."
+        abstract = re.sub(
+            r'^[A-Za-z\s]+,\s*doi:\d+\.\d+/[^\s]+',
+            '',
+            abstract
+        )
+
+        # Pattern: Leading journal name
+        if journal and abstract.lower().startswith(journal.lower()):
+            abstract = abstract[len(journal):].lstrip(',').lstrip()
+
+        # Pattern: "doi:10.xxxx/..." at the start
+        abstract = re.sub(r'^doi:\S+\s*', '', abstract)
+
+        return abstract.strip()
 
     def _matches_keywords(self, paper: Paper, keywords: list[str]) -> bool:
         """Check if paper matches any of the keywords."""

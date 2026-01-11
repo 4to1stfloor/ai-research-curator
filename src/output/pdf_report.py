@@ -321,15 +321,30 @@ class PDFReportGenerator:
 
         return '\n'.join(html_parts)
 
-    def _format_figures(self, figures: list[str]) -> str:
-        """Format figure paths for HTML."""
+    def _format_figures(self, figures: list) -> str:
+        """Format figure paths for HTML.
+
+        Args:
+            figures: List of figure paths (str) or dicts with 'path' key
+        """
         if not figures:
             return ""
 
         html_parts = ['<h3>📊 Figures</h3>', '<div class="figures">']
 
-        for i, fig_path in enumerate(figures[:6], 1):  # Limit to 6 figures
+        for i, fig_item in enumerate(figures[:6], 1):  # Limit to 6 figures
             try:
+                # Handle both string paths and dict format from JinaContentFetcher
+                if isinstance(fig_item, dict):
+                    fig_path = fig_item.get('path', '')
+                    fig_num = fig_item.get('figure_num', str(i))
+                else:
+                    fig_path = fig_item
+                    fig_num = str(i)
+
+                if not fig_path:
+                    continue
+
                 # Embed image as base64
                 with open(fig_path, 'rb') as f:
                     img_data = base64.b64encode(f.read()).decode()
@@ -339,12 +354,12 @@ class PDFReportGenerator:
 
                 html_parts.append(f'''
                 <div class="figure">
-                    <img src="data:{mime};base64,{img_data}" alt="Figure {i}">
-                    <p class="figure-caption">Figure {i}</p>
+                    <img src="data:{mime};base64,{img_data}" alt="Figure {fig_num}">
+                    <p class="figure-caption">Figure {fig_num}</p>
                 </div>
                 ''')
             except Exception as e:
-                print(f"Error embedding figure {fig_path}: {e}")
+                print(f"Error embedding figure {fig_item}: {e}")
 
         html_parts.append('</div>')
         return '\n'.join(html_parts)

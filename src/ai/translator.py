@@ -4,6 +4,7 @@ import re
 from typing import Optional
 
 from .llm_client import LLMClient
+from .summarizer import remove_non_korean_foreign_chars
 from ..models import Paper
 
 
@@ -123,6 +124,11 @@ class AbstractTranslator:
         # Add last pair
         if current_en and current_ko:
             pairs.append({"en": current_en, "ko": current_ko})
+
+        # Post-process: remove Chinese/Japanese/Cyrillic characters from Korean translations
+        for pair in pairs:
+            if 'ko' in pair:
+                pair['ko'] = remove_non_korean_foreign_chars(pair['ko'])
 
         return pairs
 

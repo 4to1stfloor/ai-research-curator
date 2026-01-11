@@ -36,10 +36,12 @@ class PaperDownloader:
         self.email = email
 
         self.session = requests.Session()
+        # Use browser-like headers to avoid being blocked
         self.session.headers.update({
-            "User-Agent": "AutoPaperScraper/1.0 (mailto:{})".format(
-                email or "anonymous@example.com"
-            )
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Connection": "keep-alive",
         })
 
     def _sanitize_filename(self, title: str, max_length: int = 100) -> str:

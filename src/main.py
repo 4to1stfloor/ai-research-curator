@@ -19,6 +19,7 @@ from .storage.history import PaperHistoryManager
 from .paper.deduplication import DeduplicationChecker
 from .paper.downloader import PaperDownloader
 from .paper.parser import PDFParser
+from .paper.content_fetcher import JinaContentFetcher
 from .ai.llm_client import LLMClient
 from .ai.summarizer import PaperSummarizer, FigureExplanationGenerator
 from .ai.translator import AbstractTranslator
@@ -68,6 +69,9 @@ class PaperDigestPipeline:
         papers_dir = resolve_path(self.config.storage.papers_dir, self.base_dir)
         self.downloader = PaperDownloader(papers_dir, email=self.env_config.pubmed_email)
         self.pdf_parser = PDFParser(papers_dir / "figures")
+
+        # Jina Content Fetcher (for web-based content retrieval)
+        self.content_fetcher = JinaContentFetcher(papers_dir / "figures")
 
         # AI Components (initialized lazily)
         self._llm_client = None
@@ -198,6 +202,12 @@ class PaperDigestPipeline:
         unique_papers = self.dedup_checker.filter_duplicates(papers)
         console.print(f"[yellow]After deduplication: {len(unique_papers)} papers[/yellow]")
 
+        # Filter open access only if enabled
+        if self.config.search.open_access_only:
+            open_access_papers = [p for p in unique_papers if p.is_open_access or p.pdf_url]
+            console.print(f"[yellow]Open access only: {len(open_access_papers)} papers[/yellow]")
+            unique_papers = open_access_papers
+
         # Limit to max_papers
         max_papers = self.config.search.max_papers
         if len(unique_papers) > max_papers:
@@ -207,24 +217,30 @@ class PaperDigestPipeline:
         return unique_papers
 
     def download_papers(self, papers: list[Paper]) -> list[Paper]:
-        """Download PDFs for open access papers."""
+        """Download PDFs for open access papers.
+
+        Note: Papers are kept even if PDF download fails - content will be
+        fetched via Jina Reader during processing.
+        """
         console.print("[cyan]Downloading papers...[/cyan]")
 
-        downloaded = []
         for paper in papers:
             if paper.is_open_access or paper.pdf_url:
-                path = self.downloader.download(paper)
-                if path:
-                    downloaded.append(paper)
-            else:
-                # Keep paper even if not downloaded
-                downloaded.append(paper)
+                self.downloader.download(paper)  # Updates paper.local_pdf_path if successful
 
-        console.print(f"[green]Downloaded {len([p for p in downloaded if p.local_pdf_path])} PDFs[/green]")
-        return downloaded
+        pdf_count = len([p for p in papers if p.local_pdf_path])
+        console.print(f"[green]Downloaded {pdf_count} PDFs[/green]")
+
+        # Return all papers - Jina Reader will be used for those without PDFs
+        return papers
 
     def process_papers(self, papers: list[Paper]) -> tuple[list[ProcessedPaper], dict]:
         """Process papers with AI (summarize, translate).
+
+        Content is fetched in this priority:
+        1. Local PDF (if downloaded)
+        2. Jina Reader (web-based content via r.jina.ai)
+        3. Abstract only (fallback)
 
         Returns:
             Tuple of (processed_papers, body_texts_dict)
@@ -245,19 +261,28 @@ class PaperDigestPipeline:
                 )
 
                 try:
-                    # Parse PDF if available
                     body_text = ""
                     figures = []
+
+                    # Method 1: Parse local PDF if available
                     if paper.local_pdf_path:
+                        console.print(f"[cyan]Parsing PDF: {paper.title[:40]}...[/cyan]")
                         parsed = self.pdf_parser.parse_paper(paper)
                         body_text = parsed.get("text", "")
                         figures = parsed.get("figures", [])
+
+                    # Method 2: Use Jina Reader for web-based content
+                    if not body_text:
+                        console.print(f"[cyan]Fetching via Jina Reader: {paper.title[:40]}...[/cyan]")
+                        content = self.content_fetcher.fetch_content(paper)
+                        body_text = content.get("text", "")
+                        figures = content.get("figures", [])
 
                     # Store body text for figure explanation
                     paper_id = paper.doi or paper.title
                     body_texts[paper_id] = body_text
 
-                    # Summarize
+                    # Summarize (will use abstract-only prompt if no body_text)
                     summary = self.summarizer.summarize(paper, body_text)
 
                     # Translate abstract
@@ -276,6 +301,8 @@ class PaperDigestPipeline:
 
                 except Exception as e:
                     console.print(f"[red]Error processing {paper.title[:40]}: {e}[/red]")
+                    import traceback
+                    traceback.print_exc()
                     # Add with minimal processing
                     processed.append(ProcessedPaper(
                         paper=paper,
@@ -293,7 +320,12 @@ class PaperDigestPipeline:
         processed_papers: list[ProcessedPaper],
         body_texts: dict
     ) -> dict:
-        """Generate figure explanations for papers."""
+        """Generate figure explanations for papers.
+
+        Only generates explanations when:
+        - Paper has extracted figures (from PDF)
+        - OR paper has figure legends in body text
+        """
         explanations = {}
 
         if not self.config.ai.generate_summary_image:
@@ -304,9 +336,19 @@ class PaperDigestPipeline:
         for pp in processed_papers:
             paper_id = pp.paper.doi or pp.paper.title
             try:
+                # Check if paper has figures
+                has_figures = bool(pp.figures)
+
                 # Extract figure legends from body text
                 body_text = body_texts.get(paper_id, "")
-                legends = self.figure_explanation_generator.extract_figure_legends(body_text)
+                legends = []
+                if body_text:
+                    legends = self.figure_explanation_generator.extract_figure_legends(body_text)
+
+                # Skip if no figures and no legends
+                if not has_figures and not legends:
+                    console.print(f"[yellow]Skipping figure explanation (no figures): {pp.paper.title[:40]}...[/yellow]")
+                    continue
 
                 # Combine legends for explanation
                 legend_text = "\n".join([
@@ -457,7 +499,12 @@ class PaperDigestPipeline:
     is_flag=True,
     help='Search only, do not process'
 )
-def main(config, max_papers, days, no_pdf, no_obsidian, dry_run):
+@click.option(
+    '--open-access-only',
+    is_flag=True,
+    help='Only process open access papers (with PDFs)'
+)
+def main(config, max_papers, days, no_pdf, no_obsidian, dry_run, open_access_only):
     """Automatic Paper Scraping AI Agent."""
     try:
         # Load configuration
@@ -481,6 +528,8 @@ def main(config, max_papers, days, no_pdf, no_obsidian, dry_run):
             app_config.output.pdf_report = False
         if no_obsidian:
             app_config.output.obsidian.enabled = False
+        if open_access_only:
+            app_config.search.open_access_only = True
 
         # Check API keys (skip for dry-run, ollama)
         if not dry_run and app_config.ai.llm_provider not in ("ollama",):

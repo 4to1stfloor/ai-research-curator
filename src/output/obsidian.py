@@ -160,8 +160,13 @@ class ObsidianExporter:
 
         return '\n'.join(lines)
 
-    def _format_figures_md(self, figures: list[str], paper_id: str) -> str:
-        """Format figures for markdown and copy to vault."""
+    def _format_figures_md(self, figures: list, paper_id: str) -> str:
+        """Format figures for markdown and copy to vault.
+
+        Args:
+            figures: List of figure paths (str) or dicts with 'path' key
+            paper_id: Paper identifier for folder naming
+        """
         if not figures:
             return "*그림 없음*"
 
@@ -169,8 +174,19 @@ class ObsidianExporter:
         paper_figures_dir = self.figures_dir / self._sanitize_filename(paper_id)
         paper_figures_dir.mkdir(exist_ok=True)
 
-        for i, fig_path in enumerate(figures[:6], 1):
+        for i, fig_item in enumerate(figures[:6], 1):
             try:
+                # Handle both string paths and dict format from JinaContentFetcher
+                if isinstance(fig_item, dict):
+                    fig_path = fig_item.get('path', '')
+                    fig_num = fig_item.get('figure_num', str(i))
+                else:
+                    fig_path = fig_item
+                    fig_num = str(i)
+
+                if not fig_path:
+                    continue
+
                 # Copy figure to vault
                 src = Path(fig_path)
                 if src.exists():
@@ -180,7 +196,7 @@ class ObsidianExporter:
 
                     # Create relative path for Obsidian
                     rel_path = dst.relative_to(self.vault_path)
-                    lines.append(f"![[{rel_path}|Figure {i}]]")
+                    lines.append(f"![[{rel_path}|Figure {fig_num}]]")
                     lines.append("")
             except Exception as e:
                 print(f"Error copying figure: {e}")

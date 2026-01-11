@@ -1,9 +1,46 @@
 """Paper summarization using LLM."""
 
+import re
 from typing import Optional
 
 from .llm_client import LLMClient
 from ..models import Paper
+
+
+def remove_non_korean_foreign_chars(text: str) -> str:
+    """Remove Chinese characters and other non-Korean foreign characters from text.
+
+    Keeps:
+    - Korean (Hangul): \\uAC00-\\uD7AF, \\u1100-\\u11FF
+    - English letters: a-zA-Z
+    - Numbers: 0-9
+    - Common punctuation and symbols
+
+    Removes:
+    - Chinese characters (CJK Unified Ideographs): \\u4E00-\\u9FFF
+    - Japanese Hiragana/Katakana
+    - Cyrillic
+    - Other foreign scripts
+    """
+    # Pattern for Chinese characters (CJK Unified Ideographs)
+    chinese_pattern = r'[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]'
+
+    # Pattern for Japanese (Hiragana, Katakana)
+    japanese_pattern = r'[\u3040-\u309F\u30A0-\u30FF]'
+
+    # Pattern for Cyrillic
+    cyrillic_pattern = r'[\u0400-\u04FF]'
+
+    # Combined pattern
+    foreign_pattern = f'({chinese_pattern}|{japanese_pattern}|{cyrillic_pattern})'
+
+    # Remove foreign characters
+    cleaned = re.sub(foreign_pattern, '', text)
+
+    # Clean up any resulting double spaces
+    cleaned = re.sub(r' +', ' ', cleaned)
+
+    return cleaned
 
 
 SUMMARIZE_SYSTEM_PROMPT = """당신은 생물정보학(bioinformatics), 암 연구(cancer research), 인공지능(AI/ML) 분야의 전문가입니다.
@@ -25,7 +62,8 @@ SUMMARIZE_SYSTEM_PROMPT = """당신은 생물정보학(bioinformatics), 암 연�
 
 4. 과학적 정확성을 유지하면서 대학원생 수준으로 작성하세요."""
 
-SUMMARIZE_PROMPT_TEMPLATE = """다음 논문을 한국어로 상세히 요약해주세요.
+# Full prompt when body text is available
+SUMMARIZE_PROMPT_FULL = """다음 논문을 한국어로 상세히 요약해주세요.
 
 ## 논문 정보
 - 제목: {title}
@@ -40,32 +78,60 @@ SUMMARIZE_PROMPT_TEMPLATE = """다음 논문을 한국어로 상세히 요약해
 
 ---
 
-**중요: 전문 용어는 영어 원문을 그대로 사용하세요 (예: single-cell RNA-seq, spatial transcriptomics, random forest). 한자는 절대 사용하지 마세요.**
+**절대 준수: 전문 용어는 영어 원문 그대로 (single-cell RNA-seq, UMAP 등). 한자 절대 금지.**
 
-다음 형식으로 상세하게 요약해주세요:
+다음 형식으로 요약해주세요:
 
 ### 핵심 발견 (Key Findings)
 - 이 연구의 가장 중요한 발견 3-5개를 상세히 설명
-- 각 발견이 왜 중요한지, 기존 연구와 어떻게 다른지 포함
 - 정량적 결과가 있다면 구체적인 수치 포함
 
 ### 연구 방법 (Methods)
-- 사용된 주요 기술/방법론을 단계별로 설명 (기술명은 영어로)
+- 사용된 주요 기술/방법론 (기술명은 영어로)
 - 데이터셋 정보 (샘플 수, 종류 등)
-- 분석 파이프라인이나 실험 설계 설명
-- 사용된 주요 도구/소프트웨어 언급
 
 ### 연구 배경 및 동기 (Background)
-- 이 연구가 해결하고자 하는 문제는 무엇인가?
-- 기존 연구의 한계점은 무엇이었나?
+- 이 연구가 해결하고자 하는 문제
 
 ### 의의 및 한계 (Significance & Limitations)
-- 이 연구가 해당 분야에 기여하는 점
-- 임상적/실용적 적용 가능성
-- 연구의 한계점이나 향후 연구 방향
+- 이 연구의 기여점과 한계
 
 ### 한 줄 요약
-이 논문의 핵심을 한 문장으로 명확하게 요약하세요.
+이 논문의 핵심을 한 문장으로.
+"""
+
+# Simplified prompt when only abstract is available (NO PDF)
+SUMMARIZE_PROMPT_ABSTRACT_ONLY = """다음 논문을 초록만 기반으로 한국어로 요약해주세요.
+
+## 논문 정보
+- 제목: {title}
+- 저널: {journal}
+- 저자: {authors}
+
+## 초록
+{abstract}
+
+---
+
+**절대 준수:**
+1. 전문 용어는 영어 원문 그대로 (single-cell RNA-seq, UMAP 등)
+2. 한자 절대 금지 - 순수 한글과 영어만 사용
+3. 초록에 없는 정보를 지어내지 마세요!
+
+**중요: 이 논문은 PDF 본문을 확인할 수 없습니다. 초록에 명시된 내용만 기반으로 요약하세요.**
+
+다음 형식으로 요약해주세요:
+
+### 핵심 발견 (Key Findings)
+- 초록에서 언급된 주요 발견만 작성
+- 초록에 없는 내용은 추측하지 마세요
+
+### 연구 방법 (Methods)
+- 초록에 언급된 방법론만 간단히 기술
+- 상세 정보 없으면: "(초록에 상세 정보 없음)"
+
+### 한 줄 요약
+이 논문의 핵심을 한 문장으로.
 """
 
 
@@ -98,24 +164,36 @@ class PaperSummarizer:
         Returns:
             Summary in Korean
         """
-        # Prepare body text
-        body = ""
-        if body_text:
+        authors_str = ", ".join(paper.authors[:5]) + ("..." if len(paper.authors) > 5 else "")
+
+        # Choose prompt based on body text availability
+        if body_text and len(body_text.strip()) > 100:
+            # Full prompt with body text
             body = body_text[:max_body_chars]
             if len(body_text) > max_body_chars:
                 body += "\n... (truncated)"
 
-        # Format prompt
-        prompt = SUMMARIZE_PROMPT_TEMPLATE.format(
-            title=paper.title,
-            journal=paper.journal,
-            authors=", ".join(paper.authors[:5]) + ("..." if len(paper.authors) > 5 else ""),
-            abstract=paper.abstract or "(초록 없음)",
-            body_text=body or "(본문 없음 - 초록만으로 요약)"
-        )
+            prompt = SUMMARIZE_PROMPT_FULL.format(
+                title=paper.title,
+                journal=paper.journal,
+                authors=authors_str,
+                abstract=paper.abstract or "(초록 없음)",
+                body_text=body
+            )
+        else:
+            # Abstract-only prompt (no hallucination)
+            prompt = SUMMARIZE_PROMPT_ABSTRACT_ONLY.format(
+                title=paper.title,
+                journal=paper.journal,
+                authors=authors_str,
+                abstract=paper.abstract or "(초록 없음)"
+            )
 
         # Generate summary
         summary = self.llm.generate(prompt, system=SUMMARIZE_SYSTEM_PROMPT)
+
+        # Post-process to remove any Chinese/Japanese/Cyrillic characters
+        summary = remove_non_korean_foreign_chars(summary)
 
         return summary
 
@@ -220,6 +298,10 @@ class FigureExplanationGenerator:
         )
 
         response = self.llm.generate(prompt)
+
+        # Post-process to remove any Chinese/Japanese/Cyrillic characters
+        response = remove_non_korean_foreign_chars(response)
+
         return response
 
     def extract_figure_legends(self, text: str) -> list[dict]:

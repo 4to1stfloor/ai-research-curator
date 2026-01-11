@@ -26,6 +26,7 @@ class SearchConfig(BaseModel):
     ]
     max_papers: int = 5
     days_lookback: int = 7
+    open_access_only: bool = False  # Only process open access papers (with PDFs)
 
 
 class ScheduleConfig(BaseModel):
