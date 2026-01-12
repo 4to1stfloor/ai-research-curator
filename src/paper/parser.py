@@ -51,22 +51,25 @@ class PDFParser:
         self,
         pdf_path: str | Path,
         paper_id: str,
-        min_width: int = 100,
-        min_height: int = 100
-    ) -> list[str]:
+        min_width: int = 200,
+        min_height: int = 200,
+        min_size_kb: float = 5.0
+    ) -> list[dict]:
         """
-        Extract figures/images from PDF.
+        Extract figures/images from PDF with improved filtering.
 
         Args:
             pdf_path: Path to PDF file
             paper_id: Unique identifier for naming
             min_width: Minimum image width to extract
             min_height: Minimum image height to extract
+            min_size_kb: Minimum file size in KB
 
         Returns:
-            List of paths to extracted images
+            List of dicts with 'figure_num', 'path', 'caption', 'page'
         """
-        extracted_paths = []
+        extracted = []
+        seen_hashes = set()  # Avoid duplicate images
 
         try:
             doc = fitz.open(pdf_path)
@@ -75,7 +78,7 @@ class PDFParser:
             paper_dir = self.figures_dir / self._sanitize_id(paper_id)
             paper_dir.mkdir(exist_ok=True)
 
-            img_index = 0
+            fig_count = 0
 
             for page_num, page in enumerate(doc):
                 # Get images on this page
@@ -94,31 +97,94 @@ class PDFParser:
                         width = base_image.get("width", 0)
                         height = base_image.get("height", 0)
 
-                        # Filter small images (logos, icons, etc.)
+                        # Filter by size
                         if width < min_width or height < min_height:
                             continue
 
+                        # Filter by file size (skip very small images)
+                        size_kb = len(image_bytes) / 1024
+                        if size_kb < min_size_kb:
+                            continue
+
+                        # Check for duplicates using hash
+                        img_hash = hash(image_bytes)
+                        if img_hash in seen_hashes:
+                            continue
+                        seen_hashes.add(img_hash)
+
+                        # Filter out likely non-figure images
+                        # (very wide/narrow aspect ratios are often headers/banners)
+                        aspect_ratio = width / height if height > 0 else 0
+                        if aspect_ratio > 5 or aspect_ratio < 0.2:
+                            continue
+
+                        fig_count += 1
+
                         # Save image
-                        img_filename = f"fig_{page_num + 1}_{img_index}.{image_ext}"
+                        img_filename = f"fig_{fig_count}.{image_ext}"
                         img_path = paper_dir / img_filename
 
                         with open(img_path, "wb") as f:
                             f.write(image_bytes)
 
-                        extracted_paths.append(str(img_path))
-                        img_index += 1
+                        extracted.append({
+                            "figure_num": str(fig_count),
+                            "path": str(img_path),
+                            "caption": "",  # Will be extracted from text
+                            "page": page_num + 1,
+                            "width": width,
+                            "height": height
+                        })
+
+                        print(f"[PDFParser] Extracted Figure {fig_count} from page {page_num + 1}")
 
                     except Exception as e:
                         print(f"Error extracting image {xref}: {e}")
                         continue
 
             doc.close()
-            print(f"Extracted {len(extracted_paths)} figures from {pdf_path}")
+            print(f"[PDFParser] Extracted {len(extracted)} figures from {pdf_path}")
+
+            # Try to match figures with captions from text
+            if extracted:
+                text = self.extract_text(pdf_path)
+                extracted = self._match_captions(extracted, text)
 
         except Exception as e:
             print(f"Error processing PDF: {e}")
 
-        return extracted_paths
+        return extracted
+
+    def _match_captions(self, figures: list[dict], text: str) -> list[dict]:
+        """
+        Try to match extracted figures with captions from text.
+
+        Args:
+            figures: List of extracted figure dicts
+            text: Full PDF text
+
+        Returns:
+            Updated figures with captions
+        """
+        # Extract figure captions from text
+        caption_pattern = r'(?:Figure|Fig\.?)\s*(\d+[A-Za-z]?)[\.:]\s*([^\n]+(?:\n(?![A-Z\d])[^\n]+)*)'
+        matches = re.finditer(caption_pattern, text, re.IGNORECASE)
+
+        captions = {}
+        for match in matches:
+            fig_num = match.group(1)
+            caption = match.group(2).strip()
+            # Clean up caption
+            caption = re.sub(r'\s+', ' ', caption)
+            captions[fig_num] = caption[:500]  # Limit length
+
+        # Match captions to figures
+        for fig in figures:
+            fig_num = fig['figure_num']
+            if fig_num in captions:
+                fig['caption'] = captions[fig_num]
+
+        return figures
 
     def extract_sections(self, text: str) -> dict[str, str]:
         """
@@ -177,6 +243,34 @@ class PDFParser:
 
         return sections
 
+    def extract_figure_legends(self, text: str) -> list[dict]:
+        """
+        Extract figure legends from paper text.
+
+        Args:
+            text: Full paper text
+
+        Returns:
+            List of {"figure_num": str, "legend": str}
+        """
+        legends = []
+
+        # Pattern for figure legends (e.g., "Figure 1.", "Fig. 1:", "Figure 1:")
+        pattern = r'(?:Figure|Fig\.?)\s*(\d+[A-Za-z]?)[\.:]\s*([^\n]+(?:\n(?![A-Z\d])[^\n]+)*)'
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+
+        for match in matches:
+            fig_num = match.group(1)
+            legend = match.group(2).strip()
+            # Clean up legend text
+            legend = re.sub(r'\s+', ' ', legend)
+            legends.append({
+                "figure_num": fig_num,
+                "legend": legend[:500]  # Limit length
+            })
+
+        return legends
+
     def _sanitize_id(self, paper_id: str) -> str:
         """Sanitize paper ID for use as directory name."""
         safe = re.sub(r'[<>:"/\\|?*]', '', paper_id)
@@ -202,7 +296,8 @@ class PDFParser:
             return {
                 "text": "",
                 "sections": {},
-                "figures": []
+                "figures": [],
+                "figure_legends": []
             }
 
         # Extract text
@@ -211,17 +306,21 @@ class PDFParser:
         # Extract sections
         sections = self.extract_sections(text)
 
+        # Extract figure legends
+        figure_legends = self.extract_figure_legends(text)
+
         # Extract figures
         figures = []
         if extract_figures:
             paper_id = paper.doi or paper.pmid or paper.title[:50]
             figures = self.extract_figures(paper.local_pdf_path, paper_id)
-            paper.extracted_figures = figures
+            paper.extracted_figures = [f['path'] for f in figures]
 
         return {
             "text": text,
             "sections": sections,
-            "figures": figures
+            "figures": figures,
+            "figure_legends": figure_legends
         }
 
 

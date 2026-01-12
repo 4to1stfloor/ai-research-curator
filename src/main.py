@@ -1,5 +1,6 @@
 """Main pipeline for automatic paper scraping."""
 
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -19,7 +20,7 @@ from .storage.history import PaperHistoryManager
 from .paper.deduplication import DeduplicationChecker
 from .paper.downloader import PaperDownloader
 from .paper.parser import PDFParser
-from .paper.content_fetcher import JinaContentFetcher
+from .paper.content_fetcher import PaperContentFetcher
 from .ai.llm_client import LLMClient
 from .ai.summarizer import PaperSummarizer, FigureExplanationGenerator
 from .ai.translator import AbstractTranslator
@@ -67,11 +68,16 @@ class PaperDigestPipeline:
 
         # Downloader & Parser
         papers_dir = resolve_path(self.config.storage.papers_dir, self.base_dir)
+        self.papers_dir = papers_dir
         self.downloader = PaperDownloader(papers_dir, email=self.env_config.pubmed_email)
         self.pdf_parser = PDFParser(papers_dir / "figures")
 
-        # Jina Content Fetcher (for web-based content retrieval)
-        self.content_fetcher = JinaContentFetcher(papers_dir / "figures")
+        # Content Fetcher (for web-based content retrieval)
+        self.content_fetcher = PaperContentFetcher(papers_dir / "figures")
+
+        # Diagrams directory
+        self.diagrams_dir = resolve_path(self.config.output.reports_path, self.base_dir).parent / "diagrams"
+        self.diagrams_dir.mkdir(parents=True, exist_ok=True)
 
         # AI Components (initialized lazily)
         self._llm_client = None
@@ -217,36 +223,32 @@ class PaperDigestPipeline:
         return unique_papers
 
     def download_papers(self, papers: list[Paper]) -> list[Paper]:
-        """Download PDFs for open access papers.
-
-        Note: Papers are kept even if PDF download fails - content will be
-        fetched via Jina Reader during processing.
-        """
+        """Download PDFs for open access papers."""
         console.print("[cyan]Downloading papers...[/cyan]")
 
         for paper in papers:
             if paper.is_open_access or paper.pdf_url:
-                self.downloader.download(paper)  # Updates paper.local_pdf_path if successful
+                self.downloader.download(paper)
 
         pdf_count = len([p for p in papers if p.local_pdf_path])
         console.print(f"[green]Downloaded {pdf_count} PDFs[/green]")
 
-        # Return all papers - Jina Reader will be used for those without PDFs
         return papers
 
-    def process_papers(self, papers: list[Paper]) -> tuple[list[ProcessedPaper], dict]:
+    def process_papers(self, papers: list[Paper]) -> tuple[list[ProcessedPaper], dict, dict]:
         """Process papers with AI (summarize, translate).
 
         Content is fetched in this priority:
         1. Local PDF (if downloaded)
-        2. Jina Reader (web-based content via r.jina.ai)
+        2. Web-based content fetcher (PMC, bioRxiv, DOI)
         3. Abstract only (fallback)
 
         Returns:
-            Tuple of (processed_papers, body_texts_dict)
+            Tuple of (processed_papers, body_texts_dict, diagrams_dict)
         """
         processed = []
         body_texts = {}
+        diagrams = {}
 
         with Progress(
             SpinnerColumn(),
@@ -263,6 +265,7 @@ class PaperDigestPipeline:
                 try:
                     body_text = ""
                     figures = []
+                    figure_legends = []
 
                     # Method 1: Parse local PDF if available
                     if paper.local_pdf_path:
@@ -270,13 +273,26 @@ class PaperDigestPipeline:
                         parsed = self.pdf_parser.parse_paper(paper)
                         body_text = parsed.get("text", "")
                         figures = parsed.get("figures", [])
+                        figure_legends = parsed.get("figure_legends", [])
 
-                    # Method 2: Use Jina Reader for web-based content
-                    if not body_text:
-                        console.print(f"[cyan]Fetching via Jina Reader: {paper.title[:40]}...[/cyan]")
+                    # Method 2: Use content fetcher for web-based content
+                    if not figures:
+                        console.print(f"[cyan]Fetching figures from web: {paper.title[:40]}...[/cyan]")
                         content = self.content_fetcher.fetch_content(paper)
-                        body_text = content.get("text", "")
+                        if not body_text:
+                            body_text = content.get("text", "")
                         figures = content.get("figures", [])
+                        if content.get("figure_legends"):
+                            figure_legends_text = content.get("figure_legends", "")
+                            # Parse figure legends from text
+                            for legend in figure_legends_text.split("\n\n"):
+                                if legend.strip():
+                                    match = re.match(r'Figure\s+(\d+[A-Za-z]?):\s*(.+)', legend, re.DOTALL)
+                                    if match:
+                                        figure_legends.append({
+                                            "figure_num": match.group(1),
+                                            "legend": match.group(2).strip()
+                                        })
 
                     # Store body text for figure explanation
                     paper_id = paper.doi or paper.title
@@ -290,6 +306,12 @@ class PaperDigestPipeline:
                     if self.config.ai.translate_abstract and paper.abstract:
                         translation = self.translator.translate(paper.abstract)
 
+                    # Generate diagram if enabled
+                    if self.config.ai.generate_summary_image:
+                        diagram = self._generate_diagram(paper, summary)
+                        if diagram:
+                            diagrams[paper_id] = diagram
+
                     processed_paper = ProcessedPaper(
                         paper=paper,
                         summary_korean=summary,
@@ -299,6 +321,8 @@ class PaperDigestPipeline:
                     )
                     processed.append(processed_paper)
 
+                    console.print(f"[green]Processed: {paper.title[:40]}... ({len(figures)} figures)[/green]")
+
                 except Exception as e:
                     console.print(f"[red]Error processing {paper.title[:40]}: {e}[/red]")
                     import traceback
@@ -306,26 +330,58 @@ class PaperDigestPipeline:
                     # Add with minimal processing
                     processed.append(ProcessedPaper(
                         paper=paper,
-                        summary_korean=f"(처리 오류: {str(e)})",
+                        summary_korean=f"(Processing error: {str(e)})",
                         abstract_translation=[],
                         figures=[]
                     ))
 
                 progress.update(task, completed=True)
 
-        return processed, body_texts
+        return processed, body_texts, diagrams
+
+    def _generate_diagram(self, paper: Paper, summary: str) -> Optional[str]:
+        """Generate a Mermaid diagram for the paper."""
+        try:
+            prompt = f"""Based on this paper summary, create a simple Mermaid flowchart diagram showing the main workflow or key concepts.
+
+Paper Title: {paper.title}
+
+Summary:
+{summary}
+
+Create a Mermaid flowchart that shows the main steps or concepts. Keep it simple with 5-8 nodes maximum.
+Use Korean for node labels.
+Return ONLY the Mermaid code, starting with 'flowchart TD' or 'flowchart LR'.
+"""
+            diagram = self.llm_client.generate(prompt)
+
+            # Validate it's a mermaid diagram
+            if 'flowchart' in diagram.lower() or 'graph' in diagram.lower():
+                # Save to file
+                paper_id = self._sanitize_filename(paper.title[:50])
+                diagram_path = self.diagrams_dir / f"{paper_id}.md"
+                with open(diagram_path, 'w', encoding='utf-8') as f:
+                    f.write(f"# Diagram: {paper.title}\n\n```mermaid\n{diagram}\n```")
+
+                return diagram
+
+        except Exception as e:
+            console.print(f"[yellow]Diagram generation error: {e}[/yellow]")
+
+        return None
+
+    def _sanitize_filename(self, title: str) -> str:
+        """Create safe filename from title."""
+        safe = re.sub(r'[<>:"/\\|?*]', '', title)
+        safe = re.sub(r'\s+', '_', safe)
+        return safe[:50]
 
     def generate_figure_explanations(
         self,
         processed_papers: list[ProcessedPaper],
         body_texts: dict
     ) -> dict:
-        """Generate figure explanations for papers.
-
-        Only generates explanations when:
-        - Paper has extracted figures (from PDF)
-        - OR paper has figure legends in body text
-        """
+        """Generate figure explanations for papers."""
         explanations = {}
 
         if not self.config.ai.generate_summary_image:
@@ -347,7 +403,6 @@ class PaperDigestPipeline:
 
                 # Skip if no figures and no legends
                 if not has_figures and not legends:
-                    console.print(f"[yellow]Skipping figure explanation (no figures): {pp.paper.title[:40]}...[/yellow]")
                     continue
 
                 # Combine legends for explanation
@@ -356,6 +411,14 @@ class PaperDigestPipeline:
                     for l in legends
                 ]) if legends else ""
 
+                # Also include captions from figures
+                for fig in pp.figures:
+                    if isinstance(fig, dict) and fig.get('caption'):
+                        legend_text += f"\nFigure {fig.get('figure_num', '?')}: {fig['caption']}"
+
+                if not legend_text.strip():
+                    continue
+
                 # Generate explanation
                 explanation = self.figure_explanation_generator.generate_explanation(
                     pp.paper,
@@ -363,6 +426,8 @@ class PaperDigestPipeline:
                     legend_text
                 )
                 explanations[paper_id] = explanation
+                console.print(f"[green]Generated figure explanation for: {pp.paper.title[:40]}...[/green]")
+
             except Exception as e:
                 console.print(f"[yellow]Figure explanation error: {e}[/yellow]")
 
@@ -371,27 +436,34 @@ class PaperDigestPipeline:
     def generate_output(
         self,
         processed_papers: list[ProcessedPaper],
-        figure_explanations: dict
+        figure_explanations: dict,
+        diagrams: dict
     ) -> dict:
-        """Generate output files (PDF, Obsidian)."""
+        """Generate output files (PDF, HTML, Obsidian)."""
         result = {}
+
+        # Generate HTML (always, as fallback for PDF)
+        console.print("[cyan]Generating HTML report...[/cyan]")
+        try:
+            html_path = self.pdf_generator.generate_html_file(
+                processed_papers, figure_explanations, diagrams
+            )
+            result["html"] = html_path
+            console.print(f"[green]HTML: {html_path}[/green]")
+        except Exception as e:
+            console.print(f"[red]HTML error: {e}[/red]")
 
         # Generate PDF
         if self.config.output.pdf_report:
             console.print("[cyan]Generating PDF report...[/cyan]")
             try:
-                pdf_path = self.pdf_generator.generate_pdf(processed_papers, figure_explanations)
+                pdf_path = self.pdf_generator.generate_pdf(
+                    processed_papers, figure_explanations, diagrams
+                )
                 result["pdf"] = pdf_path
                 console.print(f"[green]PDF: {pdf_path}[/green]")
             except Exception as e:
-                console.print(f"[red]PDF error: {e}[/red]")
-                # Fallback to HTML
-                try:
-                    html_path = self.pdf_generator.generate_html_file(processed_papers, figure_explanations)
-                    result["html"] = html_path
-                    console.print(f"[yellow]HTML fallback: {html_path}[/yellow]")
-                except Exception as e2:
-                    console.print(f"[red]HTML error: {e2}[/red]")
+                console.print(f"[yellow]PDF generation failed (using HTML): {e}[/yellow]")
 
         # Generate Obsidian notes
         if self.obsidian_exporter:
@@ -445,13 +517,13 @@ class PaperDigestPipeline:
         papers = self.download_papers(papers)
 
         # 4. Process with AI
-        processed, body_texts = self.process_papers(papers)
+        processed, body_texts, diagrams = self.process_papers(papers)
 
         # 5. Generate figure explanations
         figure_explanations = self.generate_figure_explanations(processed, body_texts)
 
         # 6. Generate output
-        output = self.generate_output(processed, figure_explanations)
+        output = self.generate_output(processed, figure_explanations, diagrams)
 
         # 7. Save to history
         self.save_to_history(papers)

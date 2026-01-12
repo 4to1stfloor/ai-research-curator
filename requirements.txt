@@ -20,5 +20,6 @@ rich>=13.7.0
 tenacity>=8.2.0
 click>=8.1.0
 
-# XML Parsing (for PubMed)
+# XML/HTML Parsing
 lxml>=5.1.0
+beautifulsoup4>=4.12.0
