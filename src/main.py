@@ -12,7 +12,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from .config import load_config, resolve_path, AppConfig, EnvConfig
-from .models import Paper, ProcessedPaper
+from .models import Paper, ProcessedPaper, ProcessingInfo
 from .search.pubmed import PubMedSearcher
 from .search.rss_feed import RSSFeedSearcher
 from .search.biorxiv import BioRxivSearcher
@@ -262,6 +262,9 @@ class PaperDigestPipeline:
                     total=None
                 )
 
+                # Initialize processing info for this paper
+                proc_info = ProcessingInfo()
+
                 try:
                     body_text = ""
                     figures = []
@@ -270,29 +273,78 @@ class PaperDigestPipeline:
                     # Method 1: Parse local PDF if available
                     if paper.local_pdf_path:
                         console.print(f"[cyan]Parsing PDF: {paper.title[:40]}...[/cyan]")
-                        parsed = self.pdf_parser.parse_paper(paper)
-                        body_text = parsed.get("text", "")
-                        figures = parsed.get("figures", [])
-                        figure_legends = parsed.get("figure_legends", [])
+                        proc_info.pdf_downloaded = True
+                        proc_info.add_note("PDF 다운로드 완료")
 
-                    # Method 2: Use content fetcher for web-based content
+                        try:
+                            parsed = self.pdf_parser.parse_paper(paper)
+                            body_text = parsed.get("text", "")
+                            figures = parsed.get("figures", [])
+                            figure_legends = parsed.get("figure_legends", [])
+
+                            if body_text:
+                                proc_info.full_text_available = True
+                                proc_info.abstract_only = False
+                                proc_info.add_note("PDF에서 본문 추출 완료")
+
+                            if figures:
+                                proc_info.figures_extracted = True
+                                proc_info.figures_source = "pdf"
+                                proc_info.figures_count = len(figures)
+                                proc_info.add_note(f"PDF에서 {len(figures)}개 Figure 추출")
+                        except Exception as e:
+                            proc_info.add_note(f"PDF 파싱 오류: {str(e)}")
+                    else:
+                        proc_info.pdf_downloaded = False
+                        proc_info.pdf_download_error = "PDF를 찾을 수 없음 (최신 논문이거나 Open Access가 아님)"
+                        proc_info.add_note("PDF 다운로드 불가")
+
+                    # Method 2: Use content fetcher for web-based content if no figures yet
                     if not figures:
                         console.print(f"[cyan]Fetching figures from web: {paper.title[:40]}...[/cyan]")
-                        content = self.content_fetcher.fetch_content(paper)
-                        if not body_text:
-                            body_text = content.get("text", "")
-                        figures = content.get("figures", [])
-                        if content.get("figure_legends"):
-                            figure_legends_text = content.get("figure_legends", "")
-                            # Parse figure legends from text
-                            for legend in figure_legends_text.split("\n\n"):
-                                if legend.strip():
-                                    match = re.match(r'Figure\s+(\d+[A-Za-z]?):\s*(.+)', legend, re.DOTALL)
-                                    if match:
-                                        figure_legends.append({
-                                            "figure_num": match.group(1),
-                                            "legend": match.group(2).strip()
-                                        })
+                        try:
+                            content = self.content_fetcher.fetch_content(paper)
+
+                            if not body_text and content.get("text"):
+                                body_text = content.get("text", "")
+                                proc_info.full_text_available = True
+                                proc_info.abstract_only = False
+                                proc_info.add_note("웹에서 본문 추출 완료")
+
+                            figures = content.get("figures", [])
+                            if figures:
+                                proc_info.figures_extracted = True
+                                proc_info.figures_source = content.get("source", "web")
+                                proc_info.figures_count = len(figures)
+                                proc_info.add_note(f"{proc_info.figures_source}에서 {len(figures)}개 Figure 추출")
+
+                            if content.get("figure_legends"):
+                                figure_legends_text = content.get("figure_legends", "")
+                                # Parse figure legends from text
+                                for legend in figure_legends_text.split("\n\n"):
+                                    if legend.strip():
+                                        match = re.match(r'Figure\s+(\d+[A-Za-z]?):\s*(.+)', legend, re.DOTALL)
+                                        if match:
+                                            figure_legends.append({
+                                                "figure_num": match.group(1),
+                                                "legend": match.group(2).strip()
+                                            })
+                        except Exception as e:
+                            proc_info.figures_error = f"웹 컨텐츠 추출 실패: {str(e)}"
+                            proc_info.add_note(f"웹 Figure 추출 실패: {str(e)[:50]}")
+
+                    # Set final status if no figures extracted
+                    if not figures:
+                        proc_info.figures_extracted = False
+                        if not proc_info.figures_error:
+                            proc_info.figures_error = "Figure를 추출할 수 있는 소스가 없음"
+                        proc_info.add_note("Figure 없음 - Abstract 기반 분석만 진행")
+
+                    # Set abstract_only status if no body text
+                    if not body_text:
+                        proc_info.full_text_available = False
+                        proc_info.abstract_only = True
+                        proc_info.add_note("본문 없음 - Abstract만 분석")
 
                     # Store body text for figure explanation
                     paper_id = paper.doi or paper.title
@@ -317,22 +369,32 @@ class PaperDigestPipeline:
                         summary_korean=summary,
                         abstract_translation=translation,
                         figures=figures,
-                        llm_provider=self.config.ai.llm_provider
+                        llm_provider=self.config.ai.llm_provider,
+                        processing_info=proc_info
                     )
                     processed.append(processed_paper)
 
-                    console.print(f"[green]Processed: {paper.title[:40]}... ({len(figures)} figures)[/green]")
+                    # Log processing status
+                    status_msg = proc_info.get_status_summary()
+                    console.print(f"[green]Processed: {paper.title[:40]}...[/green]")
+                    console.print(f"  [dim]{status_msg}[/dim]")
 
                 except Exception as e:
                     console.print(f"[red]Error processing {paper.title[:40]}: {e}[/red]")
                     import traceback
                     traceback.print_exc()
+
+                    # Create error processing info
+                    error_info = ProcessingInfo()
+                    error_info.add_note(f"처리 오류: {str(e)}")
+
                     # Add with minimal processing
                     processed.append(ProcessedPaper(
                         paper=paper,
-                        summary_korean=f"(Processing error: {str(e)})",
+                        summary_korean=f"(처리 오류 발생: {str(e)})",
                         abstract_translation=[],
-                        figures=[]
+                        figures=[],
+                        processing_info=error_info
                     ))
 
                 progress.update(task, completed=True)

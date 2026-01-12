@@ -13,6 +13,14 @@ class PaperSource(Enum):
     BIORXIV = "biorxiv"
 
 
+class ProcessingStatus(Enum):
+    """Processing status for paper components."""
+    SUCCESS = "success"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    NOT_AVAILABLE = "not_available"
+
+
 @dataclass
 class Paper:
     """Represents a research paper."""
@@ -109,6 +117,53 @@ class Paper:
 
 
 @dataclass
+class ProcessingInfo:
+    """Information about processing status and notes."""
+
+    # PDF status
+    pdf_downloaded: bool = False
+    pdf_download_error: Optional[str] = None
+
+    # Figure status
+    figures_extracted: bool = False
+    figures_source: Optional[str] = None  # "pdf", "pmc", "biorxiv", "doi", None
+    figures_count: int = 0
+    figures_error: Optional[str] = None
+
+    # Content status
+    full_text_available: bool = False
+    abstract_only: bool = True
+
+    # Notes for the report
+    processing_notes: list[str] = field(default_factory=list)
+
+    def add_note(self, note: str):
+        """Add a processing note."""
+        self.processing_notes.append(note)
+
+    def get_status_summary(self) -> str:
+        """Get a summary of the processing status."""
+        parts = []
+
+        if self.pdf_downloaded:
+            parts.append("PDF: 다운로드 완료")
+        else:
+            parts.append(f"PDF: 다운로드 실패 ({self.pdf_download_error or '알 수 없음'})")
+
+        if self.figures_extracted:
+            parts.append(f"Figure: {self.figures_count}개 추출 ({self.figures_source})")
+        else:
+            parts.append(f"Figure: 추출 실패 ({self.figures_error or '소스 없음'})")
+
+        if self.full_text_available:
+            parts.append("본문: 전문 분석")
+        else:
+            parts.append("본문: Abstract만 분석")
+
+        return " | ".join(parts)
+
+
+@dataclass
 class ProcessedPaper:
     """Paper with AI-processed content."""
 
@@ -120,11 +175,14 @@ class ProcessedPaper:
     summary_image_path: Optional[str] = None
 
     # Extracted content
-    figures: list[str] = field(default_factory=list)  # paths to extracted figures
+    figures: list = field(default_factory=list)  # list of figure dicts or paths
 
     # Processing metadata
     processed_at: datetime = field(default_factory=datetime.now)
     llm_provider: str = ""
+
+    # Processing status info
+    processing_info: ProcessingInfo = field(default_factory=ProcessingInfo)
 
 
 @dataclass
