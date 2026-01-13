@@ -7,6 +7,44 @@ from .llm_client import LLMClient
 from ..models import Paper
 
 
+def remove_llm_preamble(text: str) -> str:
+    """Remove LLM preamble/introduction text from summaries.
+
+    Removes common patterns like:
+    - "네, ~하겠습니다."
+    - "알겠습니다. ~드리겠습니다."
+    - "다음은 ~입니다."
+    """
+    import re
+
+    # Patterns to remove at the start of the text
+    preamble_patterns = [
+        # "네, ~하겠습니다/드리겠습니다" pattern
+        r'^네[,.]?\s*[^\n]*(?:하겠습니다|드리겠습니다|겠습니다)[.!]?\s*',
+        # "알겠습니다" pattern
+        r'^알겠습니다[.!]?\s*[^\n]*(?:하겠습니다|드리겠습니다)[.!]?\s*',
+        # "다음은 ~입니다" pattern
+        r'^다음은[^\n]*입니다[.!]?\s*',
+        # "요약해 드리겠습니다" standalone
+        r'^[^\n]*요약해[^\n]*드리겠습니다[.!]?\s*',
+        # "전문가 관점에서" pattern
+        r'^[^\n]*전문가\s*관점에서[^\n]*[.!]?\s*',
+        # Horizontal rule after preamble
+        r'^-{3,}\s*',
+        # Empty lines at start
+        r'^\s*\n+',
+    ]
+
+    result = text
+    for pattern in preamble_patterns:
+        result = re.sub(pattern, '', result, flags=re.MULTILINE)
+
+    # Also remove "---" separator lines that appear after preamble removal
+    result = re.sub(r'^\s*-{3,}\s*\n?', '', result, flags=re.MULTILINE)
+
+    return result.strip()
+
+
 def remove_non_korean_foreign_chars(text: str) -> str:
     """Remove Chinese characters and other non-Korean foreign characters from text.
 
@@ -194,6 +232,9 @@ class PaperSummarizer:
 
         # Post-process to remove any Chinese/Japanese/Cyrillic characters
         summary = remove_non_korean_foreign_chars(summary)
+
+        # Remove LLM preamble (e.g., "네, 전문가 관점에서...요약해 드리겠습니다")
+        summary = remove_llm_preamble(summary)
 
         return summary
 
