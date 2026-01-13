@@ -414,8 +414,15 @@ Summary:
 Create a Mermaid flowchart that shows the main steps or concepts. Keep it simple with 5-8 nodes maximum.
 Use Korean for node labels.
 Return ONLY the Mermaid code, starting with 'flowchart TD' or 'flowchart LR'.
+Do NOT include markdown code block markers like ```mermaid or ```.
 """
             diagram = self.llm_client.generate(prompt)
+
+            # Clean up: remove any markdown code block markers
+            diagram = diagram.strip()
+            diagram = re.sub(r'^```(?:mermaid)?\s*', '', diagram)
+            diagram = re.sub(r'\s*```$', '', diagram)
+            diagram = diagram.strip()
 
             # Validate it's a mermaid diagram
             if 'flowchart' in diagram.lower() or 'graph' in diagram.lower():
@@ -425,6 +432,7 @@ Return ONLY the Mermaid code, starting with 'flowchart TD' or 'flowchart LR'.
                 with open(diagram_path, 'w', encoding='utf-8') as f:
                     f.write(f"# Diagram: {paper.title}\n\n```mermaid\n{diagram}\n```")
 
+                console.print(f"[green]Generated diagram for: {paper.title[:40]}...[/green]")
                 return diagram
 
         except Exception as e:
@@ -478,7 +486,11 @@ Return ONLY the Mermaid code, starting with 'flowchart TD' or 'flowchart LR'.
                     if isinstance(fig, dict) and fig.get('caption'):
                         legend_text += f"\nFigure {fig.get('figure_num', '?')}: {fig['caption']}"
 
-                if not legend_text.strip():
+                # If we have figures but no legend text, create placeholder info
+                if not legend_text.strip() and has_figures:
+                    fig_count = len(pp.figures)
+                    legend_text = f"(논문에서 추출한 {fig_count}개의 Figure가 있습니다. Figure legend 텍스트는 추출되지 않았습니다. 논문 요약을 기반으로 Figure의 내용을 추측하여 설명해주세요.)"
+                elif not legend_text.strip():
                     continue
 
                 # Generate explanation

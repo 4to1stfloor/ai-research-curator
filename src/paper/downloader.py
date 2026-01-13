@@ -166,9 +166,16 @@ class PaperDownloader:
         if paper.pdf_url:
             pdf_urls.append(paper.pdf_url)
 
-        # 2. PMC PDF
+        # 2. PMC PDF - try multiple URL patterns
         if paper.pmcid:
-            pdf_urls.append(f"https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.pmcid}/pdf/")
+            pmcid = paper.pmcid
+            # Europe PMC backend (most reliable)
+            pdf_urls.append(f"https://europepmc.org/backend/ptpmcrender.fcgi?accid={pmcid}&blobtype=pdf")
+            # PMC direct PDF with common filenames
+            pdf_urls.append(f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/main.pdf")
+            pdf_urls.append(f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/{pmcid}.pdf")
+            # Generic PMC PDF endpoint (fallback)
+            pdf_urls.append(f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/")
 
         # 3. Unpaywall
         if paper.doi:
