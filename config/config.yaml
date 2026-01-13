@@ -9,18 +9,42 @@ search:
     - rss
     - biorxiv
 
-  # 검색할 저널 목록
+  # 검색할 저널 목록 (RSS 피드 지원 저널)
   journals:
-    - Cell
+    # Nature journals (reliable RSS)
     - Nature
-    - Science
     - Nature Methods
     - Nature Biotechnology
     - Nature Medicine
+    - Nature Communications
+    - Nature Genetics
+    - Nature Cell Biology
+
+    # Science journals
+    - Science
+    - Science Advances
+
+    # Cell Press journals
+    - Cell
     - Cancer Cell
     - Cell Systems
+    - Cell Stem Cell
+    - Molecular Cell
+
+    # BMC journals (open access)
     - Genome Biology
+    - BMC Genomics
+    - BMC Bioinformatics
+
+    # Oxford journals
     - Nucleic Acids Research
+    - Bioinformatics
+
+    # Open Access journals
+    - eLife
+    - PLOS Biology
+    - PLOS Genetics
+    - PLOS Computational Biology
 
   # 검색 키워드 (OR 조건으로 검색)
   keywords:

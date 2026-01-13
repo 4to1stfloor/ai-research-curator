@@ -5,21 +5,48 @@ from typing import Optional
 from time import mktime
 
 import feedparser
+import requests
 
 from ..models import Paper, PaperSource
 
-# Journal RSS feeds
+# Journal RSS feeds - with alternatives for problematic feeds
 JOURNAL_RSS_FEEDS = {
-    "Cell": "https://www.cell.com/cell/rss/current",
+    # Nature journals (reliable)
     "Nature": "https://www.nature.com/nature.rss",
-    "Science": "https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science",
     "Nature Methods": "https://www.nature.com/nmeth.rss",
     "Nature Biotechnology": "https://www.nature.com/nbt.rss",
     "Nature Medicine": "https://www.nature.com/nm.rss",
-    "Cancer Cell": "https://www.cell.com/cancer-cell/rss/current",
-    "Cell Systems": "https://www.cell.com/cell-systems/rss/current",
-    "Genome Biology": "https://genomebiology.biomedcentral.com/articles/feed/",
-    "Nucleic Acids Research": "https://academic.oup.com/rss/site_5127/3091.xml",
+    "Nature Communications": "https://www.nature.com/ncomms.rss",
+    "Nature Genetics": "https://www.nature.com/ng.rss",
+    "Nature Cell Biology": "https://www.nature.com/ncb.rss",
+
+    # Science journals
+    "Science": "https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science",
+    "Science Advances": "https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=sciadv",
+
+    # Cell journals - use Atom feed as alternative (more reliable)
+    "Cell": "https://www.cell.com/cell/current.rss",
+    "Cancer Cell": "https://www.cell.com/cancer-cell/current.rss",
+    "Cell Systems": "https://www.cell.com/cell-systems/current.rss",
+    "Cell Stem Cell": "https://www.cell.com/cell-stem-cell/current.rss",
+    "Molecular Cell": "https://www.cell.com/molecular-cell/current.rss",
+
+    # BMC journals
+    "Genome Biology": "https://genomebiology.biomedcentral.com/articles/most-recent/rss.xml",
+    "BMC Genomics": "https://bmcgenomics.biomedcentral.com/articles/most-recent/rss.xml",
+    "BMC Bioinformatics": "https://bmcbioinformatics.biomedcentral.com/articles/most-recent/rss.xml",
+
+    # Oxford journals - direct RSS
+    "Nucleic Acids Research": "https://academic.oup.com/nar/rss/advanceAccess",
+    "Bioinformatics": "https://academic.oup.com/bioinformatics/rss/advanceAccess",
+
+    # PLOS journals (always open access)
+    "PLOS Biology": "https://journals.plos.org/plosbiology/feed/atom",
+    "PLOS Genetics": "https://journals.plos.org/plosgenetics/feed/atom",
+    "PLOS Computational Biology": "https://journals.plos.org/ploscompbiol/feed/atom",
+
+    # eLife (open access)
+    "eLife": "https://elifesciences.org/rss/recent.xml",
 }
 
 
@@ -148,6 +175,34 @@ class RSSFeedSearcher:
         text = (paper.title + " " + paper.abstract).lower()
         return any(kw.lower() in text for kw in keywords)
 
+    def _fetch_feed(self, url: str, journal: str) -> Optional[feedparser.FeedParserDict]:
+        """Fetch RSS feed with custom headers and error handling."""
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/rss+xml, application/xml, text/xml, */*",
+        }
+
+        try:
+            # First try with requests to get content with proper encoding
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+
+            # Parse the content directly
+            feed = feedparser.parse(response.content)
+            return feed
+
+        except requests.RequestException as e:
+            print(f"[RSS] HTTP error for {journal}: {e}")
+            # Fallback to feedparser direct fetch
+            try:
+                feed = feedparser.parse(url)
+                if not feed.bozo:
+                    return feed
+            except Exception:
+                pass
+
+        return None
+
     def search(
         self,
         keywords: list[str],
@@ -169,37 +224,67 @@ class RSSFeedSearcher:
         """
         papers = []
         cutoff_date = datetime.now() - timedelta(days=days_lookback)
+        successful_feeds = 0
+        failed_feeds = 0
 
         for journal in journals:
             feed_url = self.feeds.get(journal)
             if not feed_url:
-                print(f"[RSS] No feed URL for journal: {journal}")
+                # Check for partial matches (e.g., "Nature" matches "Nature Methods")
+                for j_name, j_url in self.feeds.items():
+                    if journal.lower() in j_name.lower() or j_name.lower() in journal.lower():
+                        feed_url = j_url
+                        journal = j_name
+                        break
+
+            if not feed_url:
                 continue
 
             print(f"[RSS] Fetching {journal} feed...")
-            feed = feedparser.parse(feed_url)
+            feed = self._fetch_feed(feed_url, journal)
 
-            if feed.bozo:  # Feed parsing error
-                print(f"[RSS] Error parsing {journal} feed: {feed.bozo_exception}")
+            if feed is None:
+                print(f"[RSS] Failed to fetch {journal} feed")
+                failed_feeds += 1
                 continue
 
+            if feed.bozo:  # Feed parsing error
+                print(f"[RSS] Warning: {journal} feed had parsing issues, attempting to use partial data")
+
+            entry_count = 0
             for entry in feed.entries:
                 paper = self._parse_entry(entry, journal)
                 if paper is None:
                     continue
 
-                # Check date
-                if paper.publication_date and paper.publication_date < cutoff_date:
-                    continue
+                # Check date (if available)
+                if paper.publication_date:
+                    if paper.publication_date < cutoff_date:
+                        continue
+                # If no date, include the paper (RSS feeds usually show recent papers)
 
                 # Check keywords
                 if keywords and not self._matches_keywords(paper, keywords):
                     continue
 
                 papers.append(paper)
+                entry_count += 1
+
+            if entry_count > 0:
+                successful_feeds += 1
+                print(f"[RSS] Found {entry_count} matching papers from {journal}")
 
         # Sort by date (newest first)
         papers.sort(key=lambda p: p.publication_date or datetime.min, reverse=True)
 
-        print(f"[RSS] Found {len(papers)} papers matching criteria")
-        return papers[:max_papers]
+        # Remove duplicates by DOI or title
+        seen = set()
+        unique_papers = []
+        for p in papers:
+            key = p.doi or p.title.lower()
+            if key not in seen:
+                seen.add(key)
+                unique_papers.append(p)
+
+        print(f"[RSS] Total: {len(unique_papers)} unique papers from {successful_feeds} feeds ({failed_feeds} failed)")
+        return unique_papers[:max_papers]
