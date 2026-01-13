@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from ..models import Paper, ProcessedPaper, ProcessingInfo
+from ..models import Paper, ProcessedPaper
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -383,71 +383,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             text-decoration: none;
         }}
 
-        /* Processing Status */
-        .processing-status {{
-            background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
-            border-radius: 0.5rem;
-            padding: 1rem 1.25rem;
-            margin-top: 1rem;
-            border-left: 4px solid var(--warning);
-            font-size: 0.875rem;
-        }}
-
-        .processing-status-title {{
-            font-weight: 600;
-            color: #854d0e;
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.375rem;
-        }}
-
-        .status-badges {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-        }}
-
-        .status-badge {{
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.25rem 0.625rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }}
-
-        .status-badge.success {{
-            background: #dcfce7;
-            color: #166534;
-        }}
-
-        .status-badge.warning {{
-            background: #fef3c7;
-            color: #92400e;
-        }}
-
-        .status-badge.error {{
-            background: #fee2e2;
-            color: #991b1b;
-        }}
-
-        .processing-notes {{
-            color: #713f12;
-            font-size: 0.8rem;
-        }}
-
-        .processing-notes ul {{
-            margin: 0.25rem 0 0 0;
-            padding-left: 1.25rem;
-        }}
-
-        .processing-notes li {{
-            margin: 0.125rem 0;
-        }}
-
         /* Print styles */
         @media print {{
             body {{
@@ -602,8 +537,6 @@ PAPER_SECTION_TEMPLATE = """
         {figure_explanation_section}
 
         {diagram_section}
-
-        {processing_status_section}
     </div>
 </article>
 """
@@ -784,57 +717,6 @@ class PDFReportGenerator:
         html_parts.append('</div></section>')
         return '\n'.join(html_parts)
 
-    def _format_processing_status(self, proc_info: Optional[ProcessingInfo]) -> str:
-        """Format processing status for HTML."""
-        if not proc_info:
-            return ""
-
-        # Create status badges
-        badges = []
-
-        # PDF status badge
-        if proc_info.pdf_downloaded:
-            badges.append('<span class="status-badge success">PDF 다운로드 완료</span>')
-        else:
-            badges.append('<span class="status-badge error">PDF 없음</span>')
-
-        # Figure status badge
-        if proc_info.figures_extracted:
-            badges.append(f'<span class="status-badge success">Figure {proc_info.figures_count}개 ({proc_info.figures_source})</span>')
-        else:
-            badges.append('<span class="status-badge warning">Figure 없음</span>')
-
-        # Content status badge
-        if proc_info.full_text_available:
-            badges.append('<span class="status-badge success">전문 분석</span>')
-        else:
-            badges.append('<span class="status-badge warning">Abstract만 분석</span>')
-
-        # Build notes list
-        notes_html = ""
-        if proc_info.processing_notes:
-            notes_items = '\n'.join([f'<li>{note}</li>' for note in proc_info.processing_notes])
-            notes_html = f'''
-            <div class="processing-notes">
-                <ul>{notes_items}</ul>
-            </div>
-            '''
-
-        return f'''
-        <div class="processing-status">
-            <div class="processing-status-title">
-                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
-                </svg>
-                처리 상태
-            </div>
-            <div class="status-badges">
-                {' '.join(badges)}
-            </div>
-            {notes_html}
-        </div>
-        '''
-
     def _format_diagram(self, diagram_content: Optional[str]) -> str:
         """Format Mermaid diagram for HTML."""
         if not diagram_content:
@@ -906,9 +788,6 @@ class PDFReportGenerator:
             fig_explanation = figure_explanations.get(paper_id, "")
             diagram = diagrams.get(paper_id, "")
 
-            # Get processing status
-            proc_status = self._format_processing_status(pp.processing_info)
-
             section = PAPER_SECTION_TEMPLATE.format(
                 index=i,
                 title=paper.title,
@@ -920,8 +799,7 @@ class PDFReportGenerator:
                 translation=self._format_translation(pp.abstract_translation),
                 figures_section=self._format_figures(pp.figures),
                 figure_explanation_section=self._format_figure_explanation(fig_explanation),
-                diagram_section=self._format_diagram(diagram),
-                processing_status_section=proc_status
+                diagram_section=self._format_diagram(diagram)
             )
             paper_sections.append(section)
 

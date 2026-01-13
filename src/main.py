@@ -404,17 +404,28 @@ class PaperDigestPipeline:
     def _generate_diagram(self, paper: Paper, summary: str) -> Optional[str]:
         """Generate a Mermaid diagram for the paper."""
         try:
-            prompt = f"""Based on this paper summary, create a simple Mermaid flowchart diagram showing the main workflow or key concepts.
+            prompt = f"""Based on this paper summary, create a simple Mermaid flowchart diagram.
 
 Paper Title: {paper.title}
 
 Summary:
 {summary}
 
-Create a Mermaid flowchart that shows the main steps or concepts. Keep it simple with 5-8 nodes maximum.
-Use Korean for node labels.
-Return ONLY the Mermaid code, starting with 'flowchart TD' or 'flowchart LR'.
-Do NOT include markdown code block markers like ```mermaid or ```.
+RULES:
+1. Start with 'flowchart TD' (top-down) or 'flowchart LR' (left-right)
+2. Use simple node IDs like A, B, C, D, E
+3. Node format: A[노드 텍스트]
+4. Arrow format: A --> B (simple arrow) or A -->|라벨| B (with label)
+5. Keep it simple: 4-6 nodes maximum
+6. Use Korean for labels
+7. Do NOT use special characters like &, --, or subgraphs
+8. Do NOT include ```mermaid or ``` markers
+
+Example:
+flowchart TD
+    A[입력 데이터] --> B[전처리]
+    B --> C[분석]
+    C --> D[결과]
 """
             diagram = self.llm_client.generate(prompt)
 
@@ -423,6 +434,14 @@ Do NOT include markdown code block markers like ```mermaid or ```.
             diagram = re.sub(r'^```(?:mermaid)?\s*', '', diagram)
             diagram = re.sub(r'\s*```$', '', diagram)
             diagram = diagram.strip()
+
+            # Fix common Mermaid syntax issues
+            # Fix: "A -- label --> B" to "A -->|label| B"
+            diagram = re.sub(r'(\w+)\s*--\s*([^->\n]+)\s*-->\s*(\w+)', r'\1 -->|\2| \3', diagram)
+            # Fix: "A & B --> C" to separate lines
+            diagram = re.sub(r'(\w+)\s*&\s*(\w+)\s*-->\s*(\w+)', r'\1 --> \3\n    \2 --> \3', diagram)
+            # Remove any remaining problematic characters
+            diagram = diagram.replace('&', '')
 
             # Validate it's a mermaid diagram
             if 'flowchart' in diagram.lower() or 'graph' in diagram.lower():
