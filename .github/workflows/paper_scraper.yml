@@ -17,6 +17,9 @@ on:
         required: false
         default: '7'
 
+permissions:
+  contents: write
+
 jobs:
   digest:
     runs-on: ubuntu-latest
