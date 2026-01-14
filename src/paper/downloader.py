@@ -139,6 +139,38 @@ class PaperDownloader:
                 os.remove(output_path)
             return False
 
+    def _extract_doi_from_url(self, url: str) -> Optional[str]:
+        """Extract DOI from paper URL."""
+        if not url:
+            return None
+
+        # PLOS pattern: https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1013867
+        plos_match = re.search(r'journals\.plos\.org/\w+/article\?id=(10\.\d+/[^\s&]+)', url)
+        if plos_match:
+            return plos_match.group(1)
+
+        # Nature pattern
+        nature_match = re.search(r'nature\.com/articles/(s\d+-\d+-\d+-\w+)', url)
+        if nature_match:
+            return f"10.1038/{nature_match.group(1)}"
+
+        # BMC/Springer pattern
+        bmc_match = re.search(r'biomedcentral\.com/articles/(10\.\d+/[^\s&]+)', url)
+        if bmc_match:
+            return bmc_match.group(1)
+
+        # eLife pattern
+        elife_match = re.search(r'elifesciences\.org/articles/(\d+)', url)
+        if elife_match:
+            return f"10.7554/eLife.{elife_match.group(1)}"
+
+        # Generic DOI in URL
+        generic_match = re.search(r'(10\.\d{4,}/[^\s&]+)', url)
+        if generic_match:
+            return generic_match.group(1)
+
+        return None
+
     def download(self, paper: Paper) -> Optional[str]:
         """
         Download paper PDF.
@@ -149,6 +181,13 @@ class PaperDownloader:
         Returns:
             Path to downloaded PDF, or None if failed
         """
+        # Extract DOI from URL if not available
+        if not paper.doi and paper.url:
+            extracted_doi = self._extract_doi_from_url(paper.url)
+            if extracted_doi:
+                paper.doi = extracted_doi
+                print(f"[Downloader] Extracted DOI from URL: {extracted_doi}")
+
         # Create filename
         filename = self._sanitize_filename(paper.title) + ".pdf"
         output_path = self.output_dir / filename
@@ -187,6 +226,39 @@ class PaperDownloader:
         if paper.biorxiv_id:
             pdf_urls.append(f"https://www.biorxiv.org/content/{paper.biorxiv_id}.full.pdf")
             pdf_urls.append(f"https://www.medrxiv.org/content/{paper.biorxiv_id}.full.pdf")
+
+        # 5. Journal-specific PDF URLs based on DOI
+        if paper.doi:
+            doi = paper.doi
+            # PLOS journals
+            if "10.1371/journal" in doi:
+                pdf_urls.append(f"https://journals.plos.org/plosone/article/file?id={doi}&type=printable")
+                pdf_urls.append(f"https://journals.plos.org/ploscompbiol/article/file?id={doi}&type=printable")
+                pdf_urls.append(f"https://journals.plos.org/plosbiology/article/file?id={doi}&type=printable")
+                pdf_urls.append(f"https://journals.plos.org/plosgenetics/article/file?id={doi}&type=printable")
+
+            # Nature/Springer journals (Open Access)
+            elif "10.1038" in doi:
+                pdf_urls.append(f"https://www.nature.com/articles/{doi.split('/')[-1]}.pdf")
+
+            # eLife
+            elif "10.7554/eLife" in doi:
+                article_id = doi.split(".")[-1]
+                # Try CDN URLs (v1, v2, v3)
+                for version in ['v1', 'v2', 'v3']:
+                    pdf_urls.append(f"https://cdn.elifesciences.org/articles/{article_id}/elife-{article_id}-{version}.pdf")
+
+            # BMC/BioMed Central
+            elif "10.1186" in doi:
+                pdf_urls.append(f"https://link.springer.com/content/pdf/{doi}.pdf")
+
+            # Frontiers
+            elif "10.3389" in doi:
+                pdf_urls.append(f"https://www.frontiersin.org/articles/{doi}/pdf")
+
+            # MDPI
+            elif "10.3390" in doi:
+                pdf_urls.append(f"https://www.mdpi.com/{doi}/pdf")
 
         # Try each URL
         for url in pdf_urls:

@@ -106,6 +106,10 @@ class FigureFetcher:
             # PMC uses <figure> elements or <div class="fig">
             figure_elements = soup.find_all(['figure', 'div'], class_=re.compile(r'fig'))
 
+            # Track seen figure numbers and URLs to avoid duplicates
+            seen_fig_nums = set()
+            seen_urls = set()
+
             for i, fig_elem in enumerate(figure_elements, 1):
                 try:
                     # Find image
@@ -123,6 +127,11 @@ class FigureFetcher:
                     elif img_src.startswith('/'):
                         img_src = 'https://www.ncbi.nlm.nih.gov' + img_src
 
+                    # Skip duplicate URLs
+                    if img_src in seen_urls:
+                        continue
+                    seen_urls.add(img_src)
+
                     # Get figure caption
                     caption_elem = fig_elem.find(['figcaption', 'div'], class_=re.compile(r'caption|fig-caption'))
                     caption = caption_elem.get_text(strip=True) if caption_elem else ""
@@ -132,6 +141,11 @@ class FigureFetcher:
                     fig_match = re.search(r'[Ff]ig(?:ure)?\.?\s*(\d+[A-Za-z]?)', caption or str(fig_elem))
                     if fig_match:
                         fig_num = fig_match.group(1)
+
+                    # Skip duplicate figure numbers
+                    if fig_num in seen_fig_nums:
+                        continue
+                    seen_fig_nums.add(fig_num)
 
                     # Download figure
                     ext = Path(urlparse(img_src).path).suffix or '.jpg'
@@ -287,9 +301,29 @@ class FigureFetcher:
 
             # Generic figure extraction
             # Look for common figure patterns across publishers
-            figure_containers = soup.find_all(['figure', 'div'], class_=re.compile(
+            figure_containers = []
+
+            # Method 1: figure tags with data-test='figure' (Nature/Springer)
+            data_test_figures = soup.find_all(attrs={'data-test': 'figure'})
+            figure_containers.extend(data_test_figures)
+
+            # Method 2: figure tags (generic)
+            figure_tags = soup.find_all('figure')
+            for fig in figure_tags:
+                if fig not in figure_containers:
+                    figure_containers.append(fig)
+
+            # Method 3: divs with figure-related classes
+            class_figures = soup.find_all(['div'], class_=re.compile(
                 r'fig|figure|image-container|article-fig', re.IGNORECASE
             ))
+            for fig in class_figures:
+                if fig not in figure_containers:
+                    figure_containers.append(fig)
+
+            # Track seen figures to avoid duplicates
+            seen_fig_nums = set()
+            seen_urls = set()
 
             for i, container in enumerate(figure_containers[:10], 1):  # Limit to 10 figures
                 try:
@@ -317,6 +351,11 @@ class FigureFetcher:
                         parsed = urlparse(final_url)
                         img_src = f"{parsed.scheme}://{parsed.netloc}{img_src}"
 
+                    # Skip if URL already processed
+                    if img_src in seen_urls:
+                        continue
+                    seen_urls.add(img_src)
+
                     # Get caption
                     caption_elem = container.find(['figcaption', 'div'], class_=re.compile(r'caption', re.IGNORECASE))
                     caption = caption_elem.get_text(strip=True) if caption_elem else ""
@@ -326,6 +365,11 @@ class FigureFetcher:
                     fig_match = re.search(r'[Ff]ig(?:ure)?\.?\s*(\d+[A-Za-z]?)', caption or img.get('alt', ''))
                     if fig_match:
                         fig_num = fig_match.group(1)
+
+                    # Skip if figure number already processed
+                    if fig_num in seen_fig_nums:
+                        continue
+                    seen_fig_nums.add(fig_num)
 
                     # Download
                     ext = Path(urlparse(img_src).path).suffix or '.jpg'
@@ -379,32 +423,55 @@ class PaperContentFetcher:
         """
         Fetch paper content and figures.
 
-        Priority for figures:
+        Priority for figures (tries each until successful):
         1. PMC (if PMCID available)
         2. bioRxiv/medRxiv (if 10.1101 DOI)
         3. DOI resolution (for other publishers)
+        4. Journal-specific extraction
 
         Args:
             paper: Paper object
 
         Returns:
-            dict with keys: 'text' (content), 'figures' (list of figure dicts)
+            dict with keys: 'text' (content), 'figures' (list of figure dicts), 'source'
         """
         text = ""
         figures = []
+        source = "unknown"
 
-        # Fetch figures based on source
+        # Extract DOI from URL if not available
+        if not paper.doi and paper.url:
+            extracted_doi = self._extract_doi_from_url(paper.url)
+            if extracted_doi:
+                paper.doi = extracted_doi
+                print(f"[ContentFetcher] Extracted DOI from URL: {extracted_doi}")
+
+        # Method 1: Try PMC first (most reliable for open access)
         if paper.pmcid:
-            print(f"[ContentFetcher] Using PMC source: {paper.pmcid}")
+            print(f"[ContentFetcher] Trying PMC source: {paper.pmcid}")
             figures = self.figure_fetcher.fetch_from_pmc(paper.pmcid, paper.title)
+            if figures:
+                source = "pmc"
 
-        elif paper.doi and "10.1101" in paper.doi:
-            print(f"[ContentFetcher] Using bioRxiv source: {paper.doi}")
+        # Method 2: Try bioRxiv/medRxiv
+        if not figures and paper.doi and "10.1101" in paper.doi:
+            print(f"[ContentFetcher] Trying bioRxiv source: {paper.doi}")
             figures = self.figure_fetcher.fetch_from_biorxiv(paper.doi, paper.title)
+            if figures:
+                source = "biorxiv"
 
-        elif paper.doi:
-            print(f"[ContentFetcher] Using DOI source: {paper.doi}")
+        # Method 3: Try DOI resolution (publisher page)
+        if not figures and paper.doi:
+            print(f"[ContentFetcher] Trying DOI source: {paper.doi}")
             figures = self.figure_fetcher.fetch_from_doi(paper.doi, paper.title)
+            if figures:
+                source = "doi"
+
+        # Method 4: Try journal-specific extraction (PLOS, etc.)
+        if not figures and paper.doi:
+            figures = self._fetch_from_journal_specific(paper)
+            if figures:
+                source = "journal"
 
         # Fetch text content (from abstract if no other source)
         if paper.abstract:
@@ -413,8 +480,329 @@ class PaperContentFetcher:
         return {
             "text": text,
             "figures": figures,
-            "figure_legends": self._extract_figure_legends(figures)
+            "figure_legends": self._extract_figure_legends(figures),
+            "source": source
         }
+
+    def _extract_doi_from_url(self, url: str) -> Optional[str]:
+        """
+        Extract DOI from paper URL.
+
+        Args:
+            url: Paper URL
+
+        Returns:
+            DOI string if found, None otherwise
+        """
+        if not url:
+            return None
+
+        # PLOS pattern: https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1013867
+        plos_match = re.search(r'journals\.plos\.org/\w+/article\?id=(10\.\d+/[^\s&]+)', url)
+        if plos_match:
+            return plos_match.group(1)
+
+        # Nature pattern: https://www.nature.com/articles/s41586-024-07855-6
+        nature_match = re.search(r'nature\.com/articles/(s\d+-\d+-\d+-\w+)', url)
+        if nature_match:
+            return f"10.1038/{nature_match.group(1)}"
+
+        # Science pattern: https://www.science.org/doi/10.1126/science.xxx
+        science_match = re.search(r'science\.org/doi/(10\.\d+/[^\s&]+)', url)
+        if science_match:
+            return science_match.group(1)
+
+        # Cell/Elsevier pattern: https://www.cell.com/cell/fulltext/S0092-8674(xx)xxxxx-x
+        # These use PII, not DOI directly
+
+        # BMC/Springer pattern: https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-024-xxxx
+        bmc_match = re.search(r'biomedcentral\.com/articles/(10\.\d+/[^\s&]+)', url)
+        if bmc_match:
+            return bmc_match.group(1)
+
+        # eLife pattern: https://elifesciences.org/articles/xxxxx
+        elife_match = re.search(r'elifesciences\.org/articles/(\d+)', url)
+        if elife_match:
+            return f"10.7554/eLife.{elife_match.group(1)}"
+
+        # Generic DOI in URL
+        generic_match = re.search(r'(10\.\d{4,}/[^\s&]+)', url)
+        if generic_match:
+            return generic_match.group(1)
+
+        return None
+
+    def _fetch_from_journal_specific(self, paper: Paper) -> list[dict]:
+        """
+        Try journal-specific figure extraction patterns.
+
+        Args:
+            paper: Paper object
+
+        Returns:
+            List of figure dicts
+        """
+        if not paper.doi:
+            return []
+
+        doi = paper.doi
+        figures = []
+
+        try:
+            # PLOS journals
+            if "10.1371/journal" in doi:
+                figures = self._fetch_plos_figures(doi, paper.title)
+
+            # eLife
+            elif "10.7554/eLife" in doi:
+                figures = self._fetch_elife_figures(doi, paper.title)
+
+            # Genome Biology / BMC
+            elif "10.1186" in doi:
+                figures = self._fetch_bmc_figures(doi, paper.title)
+
+        except Exception as e:
+            print(f"[ContentFetcher] Journal-specific extraction failed: {e}")
+
+        return figures
+
+    def _fetch_plos_figures(self, doi: str, paper_title: str) -> list[dict]:
+        """Fetch figures from PLOS journals."""
+        figures = []
+        paper_id = re.sub(r'[<>:"/\\|?*]', '', paper_title)[:50].replace(' ', '_')
+        paper_dir = self.figures_dir / paper_id
+        paper_dir.mkdir(exist_ok=True)
+
+        # Determine journal from DOI
+        journal_map = {
+            'pcbi': 'ploscompbiol',
+            'pone': 'plosone',
+            'pbio': 'plosbiology',
+            'pgen': 'plosgenetics',
+            'pmed': 'plosmedicine',
+            'ppat': 'plospathogens',
+            'pntd': 'plosntds',
+        }
+
+        # Extract journal code from DOI (e.g., 10.1371/journal.pcbi.1013867)
+        journal_code = 'ploscompbiol'  # default
+        doi_match = re.search(r'journal\.(\w+)\.', doi)
+        if doi_match:
+            code = doi_match.group(1)
+            journal_code = journal_map.get(code, 'plosone')
+
+        try:
+            url = f"https://journals.plos.org/{journal_code}/article?id={doi}"
+            print(f"[PLOS] Fetching figures from: {url}")
+
+            response = self.session.get(url, timeout=self.timeout)
+            if response.status_code != 200:
+                print(f"[PLOS] Page not found, status: {response.status_code}")
+                return figures
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Find figure sections (PLOS uses div.figure)
+            fig_sections = soup.find_all('div', class_='figure')
+            print(f"[PLOS] Found {len(fig_sections)} figure sections")
+
+            seen_nums = set()
+            for i, fig in enumerate(fig_sections[:10], 1):
+                try:
+                    img = fig.find('img')
+                    if not img:
+                        continue
+
+                    img_src = img.get('src') or img.get('data-src')
+                    if not img_src:
+                        continue
+
+                    # Skip small icons
+                    if 'orcid' in img_src or 'logo' in img_src:
+                        continue
+
+                    # Make absolute URL
+                    if img_src.startswith('//'):
+                        img_src = 'https:' + img_src
+                    elif img_src.startswith('/'):
+                        img_src = 'https://journals.plos.org' + img_src
+                    elif not img_src.startswith('http'):
+                        img_src = f"https://journals.plos.org/{journal_code}/" + img_src
+
+                    # Get figure number from URL or caption
+                    fig_num = str(i)
+                    # PLOS URL pattern: .../10.1371/journal.pcbi.1013867.g001
+                    url_match = re.search(r'\.g(\d+)', img_src)
+                    if url_match:
+                        fig_num = url_match.group(1).lstrip('0') or '1'
+
+                    # Get caption
+                    caption = ""
+                    caption_elem = fig.find('figcaption') or fig.find('p', class_='caption')
+                    if caption_elem:
+                        caption = caption_elem.get_text(strip=True)
+
+                    if fig_num in seen_nums:
+                        continue
+                    seen_nums.add(fig_num)
+
+                    # Download with larger size
+                    # Change size=inline to size=large for better quality
+                    img_src_large = img_src.replace('size=inline', 'size=large')
+
+                    filepath = paper_dir / f"fig_{fig_num}.png"
+
+                    img_response = self.session.get(img_src_large, timeout=30)
+                    if img_response.status_code == 200:
+                        with open(filepath, 'wb') as f:
+                            f.write(img_response.content)
+                        figures.append({
+                            "figure_num": fig_num,
+                            "path": str(filepath),
+                            "caption": caption[:500],
+                            "url": img_src_large
+                        })
+                        print(f"[PLOS] Downloaded Figure {fig_num}")
+
+                except Exception as e:
+                    print(f"[PLOS] Error processing figure: {e}")
+                    continue
+
+        except Exception as e:
+            print(f"[PLOS] Failed: {e}")
+
+        return figures
+
+    def _fetch_elife_figures(self, doi: str, paper_title: str) -> list[dict]:
+        """Fetch figures from eLife using IIIF image server."""
+        figures = []
+        paper_id = re.sub(r'[<>:"/\\|?*]', '', paper_title)[:50].replace(' ', '_')
+        paper_dir = self.figures_dir / paper_id
+        paper_dir.mkdir(exist_ok=True)
+
+        # Extract article ID from DOI (e.g., 10.7554/eLife.92991 -> 92991)
+        article_id = doi.split(".")[-1]
+
+        url = f"https://elifesciences.org/articles/{article_id}"
+        print(f"[eLife] Fetching figures from: {url}")
+
+        response = self.session.get(url, timeout=self.timeout)
+        if response.status_code != 200:
+            return figures
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Find all figure elements with captioned-asset class
+        fig_elements = soup.find_all('figure', class_='captioned-asset')
+        print(f"[eLife] Found {len(fig_elements)} figure elements")
+
+        seen_nums = set()
+        for fig in fig_elements:
+            # Get img and extract figure number from src URL
+            img = fig.find('img')
+            if not img:
+                continue
+
+            img_src = img.get('src', '')
+            # Extract figure number from URL pattern: elife-92991-fig1-v1.tif
+            fig_num_match = re.search(r'elife-\d+-fig(\d+)', img_src)
+            if not fig_num_match:
+                continue
+
+            fig_num = fig_num_match.group(1)
+            if fig_num in seen_nums:
+                continue
+            seen_nums.add(fig_num)
+
+            # Build IIIF URL for full-size image (1500px width)
+            img_url = f"https://iiif.elifesciences.org/lax:{article_id}%2Felife-{article_id}-fig{fig_num}-v1.tif/full/1500,/0/default.jpg"
+
+            # Get caption
+            caption = ""
+            caption_elem = fig.find('figcaption')
+            if caption_elem:
+                caption = caption_elem.get_text(strip=True)[:500]
+
+            # Download figure
+            filepath = paper_dir / f"fig_{fig_num}.jpg"
+
+            img_response = self.session.get(img_url, timeout=30)
+            if img_response.status_code == 200 and len(img_response.content) > 1000:
+                with open(filepath, 'wb') as f:
+                    f.write(img_response.content)
+                figures.append({
+                    "figure_num": fig_num,
+                    "path": str(filepath),
+                    "caption": caption,
+                    "url": img_url
+                })
+                print(f"[eLife] Downloaded Figure {fig_num}")
+
+        return figures
+
+    def _fetch_bmc_figures(self, doi: str, paper_title: str) -> list[dict]:
+        """Fetch figures from BMC/Springer journals."""
+        # Similar to DOI fetch but with BMC-specific patterns
+        return self.figure_fetcher.fetch_from_doi(doi, paper_title)
+
+    def fetch_abstract_from_doi(self, doi: str) -> Optional[str]:
+        """
+        Fetch abstract from DOI by resolving to publisher page.
+
+        Args:
+            doi: Paper DOI
+
+        Returns:
+            Abstract text or None
+        """
+        if not doi:
+            return None
+
+        try:
+            doi_url = f"https://doi.org/{doi}"
+            response = self.session.get(doi_url, timeout=15, allow_redirects=True)
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Try common abstract patterns
+            abstract = None
+
+            # Pattern 1: Meta tag (most common)
+            meta_abstract = soup.find('meta', {'name': 'description'})
+            if meta_abstract and meta_abstract.get('content'):
+                abstract = meta_abstract['content']
+
+            # Pattern 2: DC.description meta
+            if not abstract:
+                dc_abstract = soup.find('meta', {'name': 'DC.description'})
+                if dc_abstract and dc_abstract.get('content'):
+                    abstract = dc_abstract['content']
+
+            # Pattern 3: Abstract section
+            if not abstract:
+                abstract_section = soup.find(['section', 'div'], class_=re.compile(r'abstract', re.I))
+                if abstract_section:
+                    # Remove heading
+                    heading = abstract_section.find(['h2', 'h3', 'h4'])
+                    if heading:
+                        heading.decompose()
+                    abstract = abstract_section.get_text(strip=True)
+
+            # Pattern 4: ID="abstract"
+            if not abstract:
+                abstract_elem = soup.find(id=re.compile(r'abstract', re.I))
+                if abstract_elem:
+                    abstract = abstract_elem.get_text(strip=True)
+
+            if abstract and len(abstract) > 100:  # Sanity check
+                print(f"[ContentFetcher] Fetched abstract from DOI: {doi[:30]}...")
+                return abstract[:3000]  # Limit length
+
+        except Exception as e:
+            print(f"[ContentFetcher] Failed to fetch abstract from DOI: {e}")
+
+        return None
 
     def _extract_figure_legends(self, figures: list[dict]) -> str:
         """Extract figure legends from figures."""

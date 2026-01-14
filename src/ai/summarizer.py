@@ -58,7 +58,7 @@ def remove_non_korean_foreign_chars(text: str) -> str:
     - Chinese characters (CJK Unified Ideographs): \\u4E00-\\u9FFF
     - Japanese Hiragana/Katakana
     - Cyrillic
-    - Other foreign scripts
+    - Thai, Arabic, Hebrew, and other foreign scripts
     """
     # Pattern for Chinese characters (CJK Unified Ideographs)
     chinese_pattern = r'[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]'
@@ -69,8 +69,20 @@ def remove_non_korean_foreign_chars(text: str) -> str:
     # Pattern for Cyrillic
     cyrillic_pattern = r'[\u0400-\u04FF]'
 
+    # Pattern for Thai
+    thai_pattern = r'[\u0E00-\u0E7F]'
+
+    # Pattern for Arabic
+    arabic_pattern = r'[\u0600-\u06FF\u0750-\u077F]'
+
+    # Pattern for Hebrew
+    hebrew_pattern = r'[\u0590-\u05FF]'
+
+    # Pattern for other scripts (Greek, etc.)
+    greek_pattern = r'[\u0370-\u03FF]'
+
     # Combined pattern
-    foreign_pattern = f'({chinese_pattern}|{japanese_pattern}|{cyrillic_pattern})'
+    foreign_pattern = f'({chinese_pattern}|{japanese_pattern}|{cyrillic_pattern}|{thai_pattern}|{arabic_pattern}|{hebrew_pattern}|{greek_pattern})'
 
     # Remove foreign characters
     cleaned = re.sub(foreign_pattern, '', text)
@@ -81,24 +93,24 @@ def remove_non_korean_foreign_chars(text: str) -> str:
     return cleaned
 
 
-SUMMARIZE_SYSTEM_PROMPT = """당신은 생물정보학(bioinformatics), 암 연구(cancer research), 인공지능(AI/ML) 분야의 전문가입니다.
-논문을 깊이 있고 상세하게 한국어로 요약해주세요.
+SUMMARIZE_SYSTEM_PROMPT = """당신은 생명과학/의학 분야 논문 요약 전문가입니다.
 
-**절대 준수 규칙:**
-1. 전문 용어는 영어 원문을 그대로 사용하세요:
-   - 좋은 예: "single-cell RNA-seq", "spatial transcriptomics", "random forest", "contrastive learning"
-   - 나쁜 예: "단일세포 RNA 시퀀싱", "공간 전사체학", "무작위 숲"
+**핵심 규칙:**
+1. 전문 용어는 영어 그대로 사용하거나 공식 한국어 용어만 사용:
+   - epigenome → "epigenome" 또는 "후성유전체" (에피지놈 X)
+   - transcriptome → "transcriptome" 또는 "전사체"
+   - genome → "genome" 또는 "유전체" (지놈 X)
+   - chromatin → "chromatin" 또는 "염색질"
+   - CRISPR-Cas9, single-cell RNA-seq, spatial transcriptomics → 영어 그대로
 
-2. 한자(漢字)와 다른 언어 절대 금지:
-   - 금지: 高, 展示, 混合, 能力 등 한자
-   - 금지: демонстрирует 등 다른 언어
-   - 반드시 순수 한글(가나다...)과 영어(ABC...)만 사용하세요
-   - "고해상도" (O), "高해상도" (X)
-   - "보여준다" (O), "展示한다" (X)
+2. 음역(발음을 한글로 옮기기) 절대 금지:
+   - 금지 예시: 에피겐ôm, 트랜스크립톰, 지놈, 크로마틴 등
+   - 영어 그대로 쓰거나 공식 번역어만 사용
 
-3. 유전자명, 단백질명, 알고리즘명은 영어 원문 그대로: p53, BRCA1, UMAP, t-SNE
+3. 유전자명, 단백질명, 기술명은 영어 그대로:
+   - p53, BRCA1, H3K27ac, dCas9-p300, UMAP, t-SNE
 
-4. 과학적 정확성을 유지하면서 대학원생 수준으로 작성하세요."""
+4. 한글과 영어만 사용 (한자, 일본어, 기타 외국어, 특수문자 금지)"""
 
 # Full prompt when body text is available
 SUMMARIZE_PROMPT_FULL = """다음 논문을 한국어로 상세히 요약해주세요.
@@ -116,7 +128,7 @@ SUMMARIZE_PROMPT_FULL = """다음 논문을 한국어로 상세히 요약해주�
 
 ---
 
-**절대 준수: 전문 용어는 영어 원문 그대로 (single-cell RNA-seq, UMAP 등). 한자 절대 금지.**
+**절대 준수: 전문 용어는 영어 그대로(single-cell RNA-seq, epigenome 등) 또는 공식 한국어(후성유전체, 전사체 등). 음역 금지(에피지놈 X).**
 
 다음 형식으로 요약해주세요:
 
@@ -152,7 +164,7 @@ SUMMARIZE_PROMPT_ABSTRACT_ONLY = """다음 논문을 초록만 기반으로 한�
 ---
 
 **절대 준수:**
-1. 전문 용어는 영어 원문 그대로 (single-cell RNA-seq, UMAP 등)
+1. 전문 용어는 영어 그대로 또는 공식 한국어(epigenome→후성유전체, 음역 금지)
 2. 한자 절대 금지 - 순수 한글과 영어만 사용
 3. 초록에 없는 정보를 지어내지 마세요!
 
@@ -286,7 +298,7 @@ FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
 ---
 
 **절대 준수 규칙:**
-1. 전문 용어는 영어 원문 그대로 사용: single-cell RNA-seq, UMAP, clustering, contrastive learning
+1. 전문 용어는 영어 그대로 또는 공식 한국어(epigenome→후성유전체, 음역 금지)
 2. 한자(漢字)와 다른 언어 절대 금지: 순수 한글과 영어만 사용
    - "고해상도" (O), "高해상도" (X)
    - "보여준다" (O), "展示한다" (X)

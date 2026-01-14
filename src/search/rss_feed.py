@@ -119,6 +119,16 @@ class RSSFeedSearcher:
             elif "author" in entry:
                 authors = [entry["author"]]
 
+            # Determine if journal is Open Access
+            open_access_journals = {
+                "Nature Communications",
+                "PLOS Biology", "PLOS Genetics", "PLOS Computational Biology",
+                "eLife",
+                "Genome Biology", "BMC Genomics", "BMC Bioinformatics",
+                "Science Advances",  # Most articles are open access
+            }
+            is_open_access = journal in open_access_journals
+
             return Paper(
                 title=title,
                 doi=doi,
@@ -128,7 +138,7 @@ class RSSFeedSearcher:
                 abstract=abstract,
                 url=url,
                 source=PaperSource.RSS,
-                is_open_access=False,  # Need to check separately
+                is_open_access=is_open_access,
             )
 
         except Exception as e:

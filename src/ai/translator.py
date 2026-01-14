@@ -8,51 +8,30 @@ from .summarizer import remove_non_korean_foreign_chars
 from ..models import Paper
 
 
-TRANSLATION_SYSTEM_PROMPT = """당신은 생물정보학(bioinformatics), 암 연구(cancer research), 인공지능(AI/ML) 분야 전문 번역가입니다.
-학술 논문의 abstract를 문장 단위로 정확하고 자연스럽게 한국어로 번역해주세요.
+TRANSLATION_SYSTEM_PROMPT = """You are a translator. Translate English sentences to natural Korean.
 
-**절대 준수 규칙:**
-1. 전문 용어는 영어 원문 그대로 사용:
-   - "single-cell RNA-seq를 사용하여", "spatial transcriptomics 데이터", "contrastive learning 기반"
+RULES:
+1. Keep technical terms in English: neural mechanisms, geometric shapes, deep learning, fMRI, etc.
+2. Use simple Korean grammar
+3. Output format must be exactly: [EN] English [KO] Korean"""
 
-2. 한자(漢字)와 다른 언어 절대 금지:
-   - 금지: 高, 展示, 混合, 能力 등 한자
-   - 반드시 순수 한글(가나다...)과 영어(ABC...)만 사용
-   - "고해상도" (O), "高해상도" (X)
+TRANSLATION_PROMPT_TEMPLATE = """Translate this abstract sentence by sentence.
 
-3. 유전자명, 단백질명, 알고리즘명은 영어 원문 그대로: p53, BRCA1, UMAP, t-SNE"""
-
-TRANSLATION_PROMPT_TEMPLATE = """다음 영어 논문 abstract를 문장 단위로 한국어로 번역해주세요.
-
-## Abstract
+Abstract:
 {abstract}
 
----
+Output format (follow exactly):
 
-## 중요 지침
-
-**문장 분리 규칙:**
-1. 영어 문장은 반드시 완전한 형태로 유지하세요 (절대로 문장 중간에서 끊지 마세요!)
-2. 마침표(.), 물음표(?), 느낌표(!)로 끝나는 완전한 문장을 기준으로 분리
-3. 콤마나 세미콜론으로 연결된 복합문장은 하나의 문장으로 처리
-4. "e.g.", "i.e.", "et al.", "vs." 등의 약어 뒤 마침표는 문장 끝이 아님
-
-**번역 규칙:**
-1. 전문 용어는 영어 원문 그대로 사용: "single-cell RNA-seq", "spatial transcriptomics"
-2. 유전자명, 단백질명, 알고리즘명은 영어 원문 그대로: "p53", "BRCA1", "random forest"
-3. 통계 수치와 p-value는 원문 그대로 유지
-4. 자연스러운 한국어 문장이 되도록 의역 가능 (의미 왜곡 금지)
-5. 절대로 한자(中文/日本語)를 사용하지 마세요
-
-## 출력 형식 (정확히 따라주세요)
-
-[EN] 첫 번째 완전한 영어 문장.
+[EN] First English sentence.
 [KO] 첫 번째 문장의 한국어 번역.
 
-[EN] 두 번째 완전한 영어 문장.
+[EN] Second English sentence.
 [KO] 두 번째 문장의 한국어 번역.
 
-(모든 문장에 대해 반복)
+Rules:
+- Keep technical terms in English (neural mechanisms, geometric shapes, fMRI, deep learning)
+- Write natural Korean sentences
+- Do not mix Korean and English randomly
 """
 
 
@@ -86,11 +65,47 @@ class AbstractTranslator:
 
         return self._parse_translation(response)
 
+    def _remove_instruction_echoes(self, text: str) -> str:
+        """Remove LLM instruction echoes from translation response."""
+        # Patterns that indicate instruction text being echoed back
+        instruction_patterns = [
+            r'\*\*이번 번역의 중요 지침\*\*.*?(?=\[EN\]|\[KO\]|$)',
+            r'\*\*번역 규칙\*\*.*?(?=\[EN\]|\[KO\]|$)',
+            r'\*\*문장 분리 규칙\*\*.*?(?=\[EN\]|\[KO\]|$)',
+            r'\*\*절대 준수 규칙\*\*.*?(?=\[EN\]|\[KO\]|$)',
+            r'\*\*출력 형식\*\*.*?(?=\[EN\]|\[KO\]|$)',
+            r'##\s*중요 지침.*?(?=\[EN\]|\[KO\]|$)',
+            r'##\s*출력 형식.*?(?=\[EN\]|\[KO\]|$)',
+            # Numbered instruction lines
+            r'\d+\.\s*전문 용어는 영어 원문[^\n]*\n?',
+            r'\d+\.\s*유전자명[^\n]*\n?',
+            r'\d+\.\s*통계 수치[^\n]*\n?',
+            r'\d+\.\s*자연스러운 한국어[^\n]*\n?',
+            r'\d+\.\s*절대로 한자[^\n]*\n?',
+            r'\d+\.\s*한자[^\n]*금지[^\n]*\n?',
+            # Alternative format markers that should not appear
+            r'\*\*원문:\*\*',
+            r'\*\*번역 결과:\*\*',
+            r'\*\*번역:\*\*',
+        ]
+
+        result = text
+        for pattern in instruction_patterns:
+            result = re.sub(pattern, '', result, flags=re.DOTALL | re.MULTILINE)
+
+        # Clean up multiple newlines
+        result = re.sub(r'\n{3,}', '\n\n', result)
+
+        return result.strip()
+
     def _parse_translation(self, response: str) -> list[dict[str, str]]:
         """Parse LLM response into sentence pairs."""
         pairs = []
         current_en = None
         current_ko = None
+
+        # Remove LLM instruction echoes from response
+        response = self._remove_instruction_echoes(response)
 
         lines = response.strip().split('\n')
 

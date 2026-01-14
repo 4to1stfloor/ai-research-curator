@@ -64,6 +64,9 @@ search:
   # 검색할 기간 (일 단위)
   days_lookback: 7
 
+  # Open Access 논문만 처리
+  open_access_only: true
+
 # 스케줄 설정 (GitHub Actions용)
 schedule:
   # 실행 주기: weekly 또는 monthly
@@ -87,7 +90,7 @@ ai:
 
   # Ollama 설정 (로컬 LLM, 무료)
   ollama:
-    model: llama3.3:70b    # llama3.3:70b, qwen2.5:32b 등
+    model: llama3.1:8b    # llama3.1:8b (GPU 메모리에 적합)
     base_url: http://localhost:11434
     max_tokens: 4096
 

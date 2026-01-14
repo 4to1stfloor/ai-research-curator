@@ -265,73 +265,62 @@ class PaperDigestPipeline:
                 # Initialize processing info for this paper
                 proc_info = ProcessingInfo()
 
+                # Fetch abstract from DOI if not available (e.g., RSS source)
+                if not paper.abstract and paper.doi:
+                    fetched_abstract = self.content_fetcher.fetch_abstract_from_doi(paper.doi)
+                    if fetched_abstract:
+                        paper.abstract = fetched_abstract
+                        proc_info.add_note("DOI에서 abstract 추가 fetch")
+
                 try:
                     body_text = ""
                     figures = []
                     figure_legends = []
 
-                    # Method 1: Parse local PDF if available
+                    # Method 1: Try web-based figure extraction first (more accurate)
+                    console.print(f"[cyan]Fetching figures from web: {paper.title[:40]}...[/cyan]")
+                    content = self.content_fetcher.fetch_content(paper)
+
+                    if content.get("text"):
+                        body_text = content.get("text", "")
+                        proc_info.full_text_available = True
+                        proc_info.abstract_only = False
+
+                    figures = content.get("figures", [])
+                    if figures:
+                        proc_info.figures_extracted = True
+                        proc_info.figures_source = content.get("source", "web")
+                        proc_info.figures_count = len(figures)
+                        proc_info.add_note(f"{proc_info.figures_source}에서 {len(figures)}개 Figure 추출")
+
+                    if content.get("figure_legends"):
+                        figure_legends_text = content.get("figure_legends", "")
+                        for legend in figure_legends_text.split("\n\n"):
+                            if legend.strip():
+                                match = re.match(r'Figure\s+(\d+[A-Za-z]?):\s*(.+)', legend, re.DOTALL)
+                                if match:
+                                    figure_legends.append({
+                                        "figure_num": match.group(1),
+                                        "legend": match.group(2).strip()
+                                    })
+
+                    # Method 2: Parse local PDF for text (not figures - web is more accurate)
                     if paper.local_pdf_path:
-                        console.print(f"[cyan]Parsing PDF: {paper.title[:40]}...[/cyan]")
                         proc_info.pdf_downloaded = True
                         proc_info.add_note("PDF 다운로드 완료")
 
-                        try:
-                            parsed = self.pdf_parser.parse_paper(paper)
+                        parsed = self.pdf_parser.parse_paper(paper, extract_figures=False)
+                        if not body_text and parsed.get("text"):
                             body_text = parsed.get("text", "")
-                            figures = parsed.get("figures", [])
-                            figure_legends = parsed.get("figure_legends", [])
+                            proc_info.full_text_available = True
+                            proc_info.abstract_only = False
+                            proc_info.add_note("PDF에서 본문 추출 완료")
 
-                            if body_text:
-                                proc_info.full_text_available = True
-                                proc_info.abstract_only = False
-                                proc_info.add_note("PDF에서 본문 추출 완료")
-
-                            if figures:
-                                proc_info.figures_extracted = True
-                                proc_info.figures_source = "pdf"
-                                proc_info.figures_count = len(figures)
-                                proc_info.add_note(f"PDF에서 {len(figures)}개 Figure 추출")
-                        except Exception as e:
-                            proc_info.add_note(f"PDF 파싱 오류: {str(e)}")
+                        if parsed.get("figure_legends"):
+                            figure_legends.extend(parsed.get("figure_legends", []))
                     else:
                         proc_info.pdf_downloaded = False
-                        proc_info.pdf_download_error = "PDF를 찾을 수 없음 (최신 논문이거나 Open Access가 아님)"
-                        proc_info.add_note("PDF 다운로드 불가")
-
-                    # Method 2: Use content fetcher for web-based content if no figures yet
-                    if not figures:
-                        console.print(f"[cyan]Fetching figures from web: {paper.title[:40]}...[/cyan]")
-                        try:
-                            content = self.content_fetcher.fetch_content(paper)
-
-                            if not body_text and content.get("text"):
-                                body_text = content.get("text", "")
-                                proc_info.full_text_available = True
-                                proc_info.abstract_only = False
-                                proc_info.add_note("웹에서 본문 추출 완료")
-
-                            figures = content.get("figures", [])
-                            if figures:
-                                proc_info.figures_extracted = True
-                                proc_info.figures_source = content.get("source", "web")
-                                proc_info.figures_count = len(figures)
-                                proc_info.add_note(f"{proc_info.figures_source}에서 {len(figures)}개 Figure 추출")
-
-                            if content.get("figure_legends"):
-                                figure_legends_text = content.get("figure_legends", "")
-                                # Parse figure legends from text
-                                for legend in figure_legends_text.split("\n\n"):
-                                    if legend.strip():
-                                        match = re.match(r'Figure\s+(\d+[A-Za-z]?):\s*(.+)', legend, re.DOTALL)
-                                        if match:
-                                            figure_legends.append({
-                                                "figure_num": match.group(1),
-                                                "legend": match.group(2).strip()
-                                            })
-                        except Exception as e:
-                            proc_info.figures_error = f"웹 컨텐츠 추출 실패: {str(e)}"
-                            proc_info.add_note(f"웹 Figure 추출 실패: {str(e)[:50]}")
+                        proc_info.pdf_download_error = "PDF를 찾을 수 없음"
 
                     # Set final status if no figures extracted
                     if not figures:
@@ -442,6 +431,21 @@ flowchart TD
             diagram = re.sub(r'(\w+)\s*&\s*(\w+)\s*-->\s*(\w+)', r'\1 --> \3\n    \2 --> \3', diagram)
             # Remove any remaining problematic characters
             diagram = diagram.replace('&', '')
+
+            # Fix: Quote node text with spaces or special chars for Korean support
+            def quote_node_text(match):
+                prefix = match.group(1)  # Node ID and bracket type
+                text = match.group(2)    # Node text
+                suffix = match.group(3)  # Closing bracket
+                # If text has spaces or special chars and not already quoted
+                if ' ' in text and not (text.startswith('"') and text.endswith('"')):
+                    text = f'"{text}"'
+                return f'{prefix}{text}{suffix}'
+
+            # Match node patterns: A[text], A{text}, A(text), A((text))
+            diagram = re.sub(r'(\w+\[)([^\]]+)(\])', quote_node_text, diagram)
+            diagram = re.sub(r'(\w+\{)([^\}]+)(\})', quote_node_text, diagram)
+            diagram = re.sub(r'(\w+\()([^\)]+)(\))', quote_node_text, diagram)
 
             # Validate it's a mermaid diagram
             if 'flowchart' in diagram.lower() or 'graph' in diagram.lower():
