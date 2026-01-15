@@ -243,7 +243,10 @@ class PaperDownloader:
 
             # Nature/Springer journals (Open Access)
             elif "10.1038" in doi:
-                pdf_urls.append(f"https://www.nature.com/articles/{doi.split('/')[-1]}.pdf")
+                article_id = doi.split('/')[-1]
+                # Nature changed PDF URL format - try both patterns
+                pdf_urls.append(f"https://www.nature.com/articles/{article_id}_reference.pdf")
+                pdf_urls.append(f"https://www.nature.com/articles/{article_id}.pdf")
 
             # eLife
             elif "10.7554/eLife" in doi:
