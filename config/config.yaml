@@ -3,11 +3,11 @@
 
 # 검색 설정
 search:
-  # 사용할 검색 소스 (pubmed, rss, biorxiv)
+  # 사용할 검색 소스 (pubmed, rss)
+  # biorxiv 제외: Cloudflare 차단으로 figure 다운로드 불가
   sources:
     - pubmed
     - rss
-    - biorxiv
 
   # 검색할 저널 목록 (RSS 피드 지원 저널)
   journals:

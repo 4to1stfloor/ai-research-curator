@@ -259,6 +259,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             margin: 1.25rem 0 0.5rem 0;
         }}
 
+        .section-content h5 {{
+            color: var(--accent);
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin: 1.5rem 0 0.75rem 0;
+            padding-bottom: 0.25rem;
+            border-bottom: 1px solid var(--border);
+        }}
+
         .section-content ul, .section-content ol {{
             margin: 0.5rem 0;
             padding-left: 1.5rem;
@@ -580,6 +589,12 @@ class PDFReportGenerator:
                     in_list = False
                     list_type = None
                 continue
+            elif line.startswith('#### '):
+                # Convert #### to h5 for figure titles
+                if in_list:
+                    html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
+                    in_list = False
+                html_lines.append(f'<h5>{line[5:]}</h5>')
             elif line.startswith('### '):
                 if in_list:
                     html_lines.append('</ul>' if list_type == 'ul' else '</ol>')

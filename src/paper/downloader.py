@@ -69,6 +69,10 @@ class PaperDownloader:
         if not self.email or not doi:
             return None
 
+        # Remove 'doi:' prefix if present
+        if doi.startswith('doi:'):
+            doi = doi[4:]
+
         try:
             url = UNPAYWALL_API.format(doi=doi)
             response = self.session.get(url, params={"email": self.email})

@@ -281,6 +281,10 @@ class FigureFetcher:
         Returns:
             List of {figure_num, path, caption}
         """
+        # Remove 'doi:' prefix if present
+        if doi and doi.startswith('doi:'):
+            doi = doi[4:]
+
         figures = []
         paper_id = self._sanitize_filename(paper_title)
         paper_dir = self.figures_dir / paper_id
@@ -396,6 +400,104 @@ class FigureFetcher:
 
         return figures
 
+    def fetch_from_pdf(self, pdf_path: str, paper_title: str) -> list[dict]:
+        """
+        Extract figures from a downloaded PDF using PyMuPDF.
+
+        Args:
+            pdf_path: Path to the PDF file
+            paper_title: Paper title for naming
+
+        Returns:
+            List of {figure_num, path, caption}
+        """
+        figures = []
+        paper_id = self._sanitize_filename(paper_title)
+        paper_dir = self.figures_dir / paper_id
+        paper_dir.mkdir(exist_ok=True)
+
+        try:
+            import fitz  # PyMuPDF
+        except ImportError:
+            print("[PDF] PyMuPDF not installed. Run: pip install pymupdf")
+            return figures
+
+        try:
+            print(f"[PDF] Extracting figures from: {pdf_path}")
+            doc = fitz.open(pdf_path)
+
+            fig_num = 0
+            seen_images = set()  # Track image hashes to avoid duplicates
+
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                images = page.get_images(full=True)
+
+                for img_idx, img_info in enumerate(images):
+                    try:
+                        xref = img_info[0]
+
+                        # Skip if already processed (same image used multiple times)
+                        if xref in seen_images:
+                            continue
+                        seen_images.add(xref)
+
+                        # Extract image
+                        base_image = doc.extract_image(xref)
+                        if not base_image:
+                            continue
+
+                        image_bytes = base_image["image"]
+                        image_ext = base_image.get("ext", "png")
+
+                        # Get image dimensions
+                        width = base_image.get("width", 0)
+                        height = base_image.get("height", 0)
+
+                        # Skip small images (icons, logos, decorations)
+                        # Most figures are at least 200x200 pixels
+                        if width < 200 or height < 200:
+                            continue
+
+                        # Skip very small file sizes (likely icons)
+                        if len(image_bytes) < 5000:  # 5KB minimum
+                            continue
+
+                        fig_num += 1
+                        filename = f"fig_{fig_num}.{image_ext}"
+                        filepath = paper_dir / filename
+
+                        # Save image
+                        with open(filepath, "wb") as f:
+                            f.write(image_bytes)
+
+                        figures.append({
+                            "figure_num": str(fig_num),
+                            "path": str(filepath),
+                            "caption": f"Figure from page {page_num + 1}",
+                            "source": "pdf"
+                        })
+                        print(f"[PDF] Extracted Figure {fig_num} ({width}x{height}) from page {page_num + 1}")
+
+                        # Limit to 10 figures max
+                        if fig_num >= 10:
+                            break
+
+                    except Exception as e:
+                        print(f"[PDF] Error extracting image: {e}")
+                        continue
+
+                if fig_num >= 10:
+                    break
+
+            doc.close()
+            print(f"[PDF] Extracted {len(figures)} figures from PDF")
+
+        except Exception as e:
+            print(f"[PDF] Error processing PDF: {e}")
+
+        return figures
+
 
 class PaperContentFetcher:
     """Fetch paper content (text and figures) from various sources."""
@@ -446,6 +548,13 @@ class PaperContentFetcher:
                 paper.doi = extracted_doi
                 print(f"[ContentFetcher] Extracted DOI from URL: {extracted_doi}")
 
+        # Try to get PMCID from DOI if not available
+        if not paper.pmcid and paper.doi:
+            pmcid = self._doi_to_pmcid(paper.doi)
+            if pmcid:
+                paper.pmcid = pmcid
+                print(f"[ContentFetcher] Found PMCID from DOI: {pmcid}")
+
         # Method 1: Try PMC first (most reliable for open access)
         if paper.pmcid:
             print(f"[ContentFetcher] Trying PMC source: {paper.pmcid}")
@@ -473,6 +582,13 @@ class PaperContentFetcher:
             if figures:
                 source = "journal"
 
+        # Method 5: Extract from downloaded PDF (fallback)
+        if not figures and paper.local_pdf_path:
+            print(f"[ContentFetcher] Trying PDF extraction: {paper.local_pdf_path}")
+            figures = self.figure_fetcher.fetch_from_pdf(paper.local_pdf_path, paper.title)
+            if figures:
+                source = "pdf"
+
         # Fetch text content (from abstract if no other source)
         if paper.abstract:
             text = paper.abstract
@@ -483,6 +599,51 @@ class PaperContentFetcher:
             "figure_legends": self._extract_figure_legends(figures),
             "source": source
         }
+
+    def _doi_to_pmcid(self, doi: str) -> Optional[str]:
+        """
+        Convert DOI to PMCID using NCBI ID Converter API.
+
+        Many Nature, Science, Cell papers are available in PMC.
+        This allows us to get figures from PMC even without PMCID in RSS.
+
+        Args:
+            doi: Paper DOI
+
+        Returns:
+            PMCID if found, None otherwise
+        """
+        if not doi:
+            return None
+
+        # Remove 'doi:' prefix if present
+        if doi.startswith('doi:'):
+            doi = doi[4:]
+
+        try:
+            # NCBI ID Converter API
+            api_url = f"https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={doi}&format=json"
+            print(f"[ContentFetcher] Looking up PMCID for DOI: {doi}")
+
+            response = self.session.get(api_url, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+
+            # Response format: {"status": "ok", "records": [{"doi": "...", "pmcid": "PMC..."}]}
+            if data.get('status') == 'ok' and data.get('records'):
+                record = data['records'][0]
+                pmcid = record.get('pmcid')
+                if pmcid:
+                    print(f"[ContentFetcher] Found PMCID: {pmcid}")
+                    return pmcid
+                else:
+                    print(f"[ContentFetcher] No PMCID found for DOI (paper not in PMC)")
+
+        except Exception as e:
+            print(f"[ContentFetcher] PMCID lookup failed: {e}")
+
+        return None
 
     def _extract_doi_from_url(self, url: str) -> Optional[str]:
         """
@@ -757,6 +918,10 @@ class PaperContentFetcher:
         """
         if not doi:
             return None
+
+        # Remove 'doi:' prefix if present
+        if doi.startswith('doi:'):
+            doi = doi[4:]
 
         try:
             doi_url = f"https://doi.org/{doi}"

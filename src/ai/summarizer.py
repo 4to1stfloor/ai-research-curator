@@ -96,21 +96,26 @@ def remove_non_korean_foreign_chars(text: str) -> str:
 SUMMARIZE_SYSTEM_PROMPT = """당신은 생명과학/의학 분야 논문 요약 전문가입니다.
 
 **핵심 규칙:**
-1. 전문 용어는 영어 그대로 사용하거나 공식 한국어 용어만 사용:
+1. **세포명, 조직명, 해부학 용어는 반드시 영어 그대로 유지:**
+   - melanocyte, fibroblast, macrophage, T cell, B cell, neuron → 영어 그대로
+   - neural crest, epidermis, dermis, adipose tissue → 영어 그대로
+   - 절대 음역 금지: "며느기" (X), "멜라노사이트" (X) → "melanocyte" (O)
+
+2. 전문 용어는 영어 그대로 사용하거나 공식 한국어 용어만 사용:
    - epigenome → "epigenome" 또는 "후성유전체" (에피지놈 X)
    - transcriptome → "transcriptome" 또는 "전사체"
    - genome → "genome" 또는 "유전체" (지놈 X)
    - chromatin → "chromatin" 또는 "염색질"
    - CRISPR-Cas9, single-cell RNA-seq, spatial transcriptomics → 영어 그대로
 
-2. 음역(발음을 한글로 옮기기) 절대 금지:
-   - 금지 예시: 에피겐ôm, 트랜스크립톰, 지놈, 크로마틴 등
+3. 음역(발음을 한글로 옮기기) 절대 금지:
+   - 금지 예시: 에피겐ôm, 트랜스크립톰, 지놈, 크로마틴, 며느기 등
    - 영어 그대로 쓰거나 공식 번역어만 사용
 
-3. 유전자명, 단백질명, 기술명은 영어 그대로:
-   - p53, BRCA1, H3K27ac, dCas9-p300, UMAP, t-SNE
+4. 유전자명, 단백질명, 기술명은 영어 그대로:
+   - p53, BRCA1, H3K27ac, dCas9-p300, UMAP, t-SNE, BMP, ID1
 
-4. 한글과 영어만 사용 (한자, 일본어, 기타 외국어, 특수문자 금지)"""
+5. 한글과 영어만 사용 (한자, 일본어, 기타 외국어, 특수문자 금지)"""
 
 # Full prompt when body text is available
 SUMMARIZE_PROMPT_FULL = """다음 논문을 한국어로 상세히 요약해주세요.
@@ -298,26 +303,32 @@ FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
 ---
 
 **절대 준수 규칙:**
-1. 전문 용어는 영어 그대로 또는 공식 한국어(epigenome→후성유전체, 음역 금지)
+1. **전문 용어는 반드시 영어 그대로 유지**:
+   - 세포명: melanocyte, fibroblast, macrophage, T cell 등 → 영어 그대로
+   - 분자명: RNA, DNA, protein, gene 등 → 영어 그대로
+   - 기술명: single-cell RNA-seq, ATAC-seq, UMAP, t-SNE 등 → 영어 그대로
+   - 해부학: neural crest, epidermis, dermis 등 → 영어 그대로
+   - 음역 절대 금지: "며느기" (X), "멜라노사이트" (X) → "melanocyte" (O)
+
 2. 한자(漢字)와 다른 언어 절대 금지: 순수 한글과 영어만 사용
-   - "고해상도" (O), "高해상도" (X)
-   - "보여준다" (O), "展示한다" (X)
-3. 해당 분야 대학원생이 이해할 수 있도록 설명하세요
 
-다음 형식으로 Figure를 설명해주세요:
+3. **Figure는 반드시 번호 순서대로 설명** (Figure 1 → Figure 2 → Figure 3...)
 
-### Figure 설명
+4. 해당 분야 대학원생이 이해할 수 있도록 설명하세요
 
-**핵심 내용**: (이 Figure가 보여주는 가장 중요한 결과를 1-2문장으로)
+다음 형식으로 **번호 순서대로** Figure를 설명해주세요:
 
+#### Figure 1: (Figure 1 제목)
+**핵심 내용**: (이 Figure가 보여주는 가장 중요한 결과)
 **세부 설명**:
-- Panel별 주요 내용 설명
-- 사용된 분석 방법 설명
-- 그래프/플롯의 축과 의미 설명
+- Panel별 주요 내용
+- 분석 방법 및 그래프 해석
 
-**해석 포인트**:
-- 이 Figure에서 주목해야 할 점
-- 연구 결론과의 연결점
+#### Figure 2: (Figure 2 제목)
+**핵심 내용**: ...
+**세부 설명**: ...
+
+(이후 Figure도 같은 형식으로 번호 순서대로)
 """
 
 

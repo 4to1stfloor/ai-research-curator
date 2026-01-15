@@ -8,11 +8,16 @@ from .summarizer import remove_non_korean_foreign_chars
 from ..models import Paper
 
 
-TRANSLATION_SYSTEM_PROMPT = """You are a translator. Translate English sentences to natural Korean.
+TRANSLATION_SYSTEM_PROMPT = """You are a translator specializing in biomedical papers. Translate English sentences to natural Korean.
 
 RULES:
-1. Keep technical terms in English: neural mechanisms, geometric shapes, deep learning, fMRI, etc.
-2. Use simple Korean grammar
+1. Keep ALL technical terms in English:
+   - Cell names: melanocyte, fibroblast, macrophage, T cell, B cell, neuron
+   - Anatomy: neural crest, epidermis, dermis, adipose tissue
+   - Molecules: RNA, DNA, protein, BMP, ID1, p53, BRAF
+   - Methods: single-cell RNA-seq, ATAC-seq, UMAP, t-SNE, fMRI
+   - NEVER transliterate: "melanocyte" stays as "melanocyte" (NOT "멜라노사이트" or "며느기")
+2. Use simple, natural Korean grammar
 3. Output format must be exactly: [EN] English [KO] Korean"""
 
 TRANSLATION_PROMPT_TEMPLATE = """Translate this abstract sentence by sentence.
@@ -28,10 +33,14 @@ Output format (follow exactly):
 [EN] Second English sentence.
 [KO] 두 번째 문장의 한국어 번역.
 
-Rules:
-- Keep technical terms in English (neural mechanisms, geometric shapes, fMRI, deep learning)
+CRITICAL Rules:
+- Keep ALL technical terms in English:
+  * Cell names: melanocyte, fibroblast, neuron, T cell → Keep as English
+  * Anatomy: neural crest, epidermis → Keep as English
+  * Methods: single-cell RNA-seq, ATAC-seq → Keep as English
+  * Molecules: BMP, ID1, BRAF → Keep as English
+- NEVER transliterate cell names (NO "멜라노사이트", NO "며느기")
 - Write natural Korean sentences
-- Do not mix Korean and English randomly
 """
 
 
@@ -87,6 +96,15 @@ class AbstractTranslator:
             r'\*\*원문:\*\*',
             r'\*\*번역 결과:\*\*',
             r'\*\*번역:\*\*',
+            # LLM chatter/noise to remove
+            r'Let me know if you\'d like.*$',
+            r'I hope this helps.*$',
+            r'Please let me know.*$',
+            r'Feel free to ask.*$',
+            r'Is there anything else.*$',
+            r'I\'ll continue.*$',
+            r'\.\.\.\s*I\'ll.*$',
+            r'Would you like me to.*$',
         ]
 
         result = text

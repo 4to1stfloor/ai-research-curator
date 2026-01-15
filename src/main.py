@@ -265,10 +265,10 @@ class PaperDigestPipeline:
                 # Initialize processing info for this paper
                 proc_info = ProcessingInfo()
 
-                # Fetch abstract from DOI if not available (e.g., RSS source)
-                if not paper.abstract and paper.doi:
+                # Fetch abstract from DOI if not available or too short (e.g., RSS source)
+                if paper.doi and (not paper.abstract or len(paper.abstract) < 500):
                     fetched_abstract = self.content_fetcher.fetch_abstract_from_doi(paper.doi)
-                    if fetched_abstract:
+                    if fetched_abstract and len(fetched_abstract) > len(paper.abstract or ""):
                         paper.abstract = fetched_abstract
                         proc_info.add_note("DOI에서 abstract 추가 fetch")
 

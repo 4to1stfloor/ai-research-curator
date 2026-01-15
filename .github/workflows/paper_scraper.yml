@@ -50,6 +50,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
 
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ secrets.PUBMED_EMAIL }}" ]; then
+            echo "❌ ERROR: PUBMED_EMAIL secret is required but not set!"
+            echo ""
+            echo "Please set PUBMED_EMAIL in your repository secrets:"
+            echo "  Settings > Secrets and variables > Actions > New repository secret"
+            echo ""
+            echo "PUBMED_EMAIL is needed for:"
+            echo "  - PubMed API access (higher rate limits)"
+            echo "  - Unpaywall API (Open Access PDF downloads)"
+            exit 1
+          fi
+          echo "✓ PUBMED_EMAIL is configured"
+
       - name: Load paper history
         run: |
           # History 파일이 없으면 초기화
