@@ -153,10 +153,16 @@ class PaperDigestPipeline:
             self._figure_explanation_gen = FigureExplanationGenerator(self.llm_client)
         return self._figure_explanation_gen
 
-    def search_papers(self) -> list[Paper]:
-        """Search for papers from all configured sources."""
+    def search_papers(self, search_multiplier: int = 10, days_lookback_override: int = None) -> list[Paper]:
+        """Search for papers from all configured sources.
+
+        Args:
+            search_multiplier: Multiply max_papers by this to get more candidates
+            days_lookback_override: Override days_lookback setting
+        """
         all_papers = []
         search_config = self.config.search
+        days = days_lookback_override or search_config.days_lookback
 
         with Progress(
             SpinnerColumn(),
@@ -170,8 +176,8 @@ class PaperDigestPipeline:
                 papers = self.pubmed_searcher.search(
                     keywords=search_config.keywords,
                     journals=search_config.journals,
-                    max_papers=search_config.max_papers * 2,
-                    days_lookback=search_config.days_lookback
+                    max_papers=search_config.max_papers * search_multiplier,
+                    days_lookback=days
                 )
                 all_papers.extend(papers)
                 progress.update(task, completed=True)
@@ -182,8 +188,8 @@ class PaperDigestPipeline:
                 papers = self.rss_searcher.search(
                     keywords=search_config.keywords,
                     journals=search_config.journals,
-                    max_papers=search_config.max_papers * 2,
-                    days_lookback=search_config.days_lookback
+                    max_papers=search_config.max_papers * search_multiplier,
+                    days_lookback=days
                 )
                 all_papers.extend(papers)
                 progress.update(task, completed=True)
@@ -193,8 +199,8 @@ class PaperDigestPipeline:
                 task = progress.add_task("Searching bioRxiv...", total=None)
                 papers = self.biorxiv_searcher.search(
                     keywords=search_config.keywords,
-                    max_papers=search_config.max_papers * 2,
-                    days_lookback=search_config.days_lookback
+                    max_papers=search_config.max_papers * search_multiplier,
+                    days_lookback=days
                 )
                 all_papers.extend(papers)
                 progress.update(task, completed=True)
@@ -203,10 +209,35 @@ class PaperDigestPipeline:
         return all_papers
 
     def filter_papers(self, papers: list[Paper]) -> list[Paper]:
-        """Filter out duplicates and limit to max_papers."""
+        """Filter out duplicates, non-research articles, and limit to max_papers."""
         # Remove duplicates
         unique_papers = self.dedup_checker.filter_duplicates(papers)
         console.print(f"[yellow]After deduplication: {len(unique_papers)} papers[/yellow]")
+
+        # Filter out non-research articles (Perspective, Review, Editorial, etc.)
+        non_research_types = [
+            "Review", "Editorial", "Comment", "Letter", "News",
+            "Published Erratum", "Retracted Publication", "Biography",
+            "Historical Article", "Interview", "Lecture", "Guideline",
+            "Perspective", "Commentary", "Opinion", "Correspondence",
+            "Correction", "Retraction", "Primer", "Viewpoint"
+        ]
+        research_papers = []
+        filtered_count = 0
+        for p in unique_papers:
+            is_research = True
+            if p.article_type:
+                for nrt in non_research_types:
+                    if nrt.lower() in p.article_type.lower():
+                        is_research = False
+                        filtered_count += 1
+                        break
+            if is_research:
+                research_papers.append(p)
+
+        if filtered_count > 0:
+            console.print(f"[yellow]Filtered out {filtered_count} non-research articles (Review, Perspective, etc.)[/yellow]")
+        unique_papers = research_papers
 
         # Filter open access only if enabled
         if self.config.search.open_access_only:
@@ -418,11 +449,23 @@ flowchart TD
 """
             diagram = self.llm_client.generate(prompt)
 
-            # Clean up: remove any markdown code block markers
+            # Clean up: extract Mermaid code from response
             diagram = diagram.strip()
-            diagram = re.sub(r'^```(?:mermaid)?\s*', '', diagram)
-            diagram = re.sub(r'\s*```$', '', diagram)
-            diagram = diagram.strip()
+
+            # If response contains code block markers, extract content between them
+            code_block_match = re.search(r'```(?:mermaid)?\s*((?:flowchart|graph)[\s\S]*?)```', diagram, re.IGNORECASE)
+            if code_block_match:
+                diagram = code_block_match.group(1).strip()
+            else:
+                # No code block markers, try to find flowchart/graph directly
+                flowchart_match = re.search(r'((?:flowchart|graph)\s+(?:TD|LR|TB|RL|BT)[\s\S]*?)(?:\n\n[A-Za-z]|$)', diagram, re.IGNORECASE)
+                if flowchart_match:
+                    diagram = flowchart_match.group(1).strip()
+                else:
+                    # Fallback: remove markdown markers at start/end
+                    diagram = re.sub(r'^```(?:mermaid)?\s*', '', diagram)
+                    diagram = re.sub(r'\s*```$', '', diagram)
+                    diagram = diagram.strip()
 
             # Fix common Mermaid syntax issues
             # Fix: "A -- label --> B" to "A -->|label| B"
@@ -589,17 +632,22 @@ flowchart TD
         console.print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
         console.print("=" * 50)
 
+        max_papers = self.config.search.max_papers
+
         # 1. Search
-        papers = self.search_papers()
-        if not papers:
+        all_papers = self.search_papers()
+        if not all_papers:
             console.print("[yellow]No papers found![/yellow]")
             return {"papers": 0}
 
         # 2. Filter
-        papers = self.filter_papers(papers)
+        papers = self.filter_papers(all_papers)
         if not papers:
             console.print("[yellow]No new papers after filtering![/yellow]")
             return {"papers": 0}
+
+        if len(papers) < max_papers:
+            console.print(f"[yellow]Found {len(papers)} papers (requested {max_papers}). Consider adding more keywords or journals in config.[/yellow]")
 
         # Display found papers
         table = Table(title="Found Papers")
