@@ -208,20 +208,69 @@ class ObsidianExporter:
         # Look for "한 줄 요약" section
         if "한 줄 요약" in summary:
             start = summary.find("한 줄 요약")
-            end = summary.find("\n", start + 10)
-            if end > start:
-                line = summary[start:end].strip()
-                # Remove header markers
-                line = line.replace("### ", "").replace("한 줄 요약", "").strip()
-                if line:
-                    return line
+
+            # Find the end of the header line (after ":" or first newline)
+            colon_pos = summary.find(":", start)
+            newline_pos = summary.find("\n", start)
+
+            # Determine where content starts
+            if colon_pos > start and (newline_pos == -1 or colon_pos < newline_pos):
+                # Content might be on same line after ":"
+                content_start = colon_pos + 1
+            elif newline_pos > start:
+                content_start = newline_pos + 1
+            else:
+                content_start = start + len("한 줄 요약")
+
+            # Find the end of the content (next blank line, section, or end)
+            remaining = summary[content_start:]
+
+            # Find next section marker
+            next_section = remaining.find("\n\n")
+            next_header = remaining.find("\n#")
+            next_dash = remaining.find("\n---")
+
+            ends = [e for e in [next_section, next_header, next_dash] if e != -1]
+            end_pos = min(ends) if ends else len(remaining)
+
+            content = remaining[:end_pos].strip()
+
+            # Clean up any remaining markers
+            content = content.replace("### ", "").replace("## ", "").replace("# ", "")
+            content = content.lstrip(":").strip()
+
+            if content:
+                return content
+
+        # Fallback: first paragraph after "핵심 발견" or first meaningful text
+        if "핵심 발견" in summary:
+            # Try to get the first bullet point
+            start = summary.find("핵심 발견")
+            after_header = summary.find("\n", start)
+            if after_header > 0:
+                # Find first numbered item
+                first_item = summary.find("1.", after_header)
+                if first_item > 0:
+                    end_item = summary.find("\n", first_item + 3)
+                    if end_item > first_item:
+                        item = summary[first_item:end_item].strip()
+                        item = item.lstrip("1.").lstrip("**").rstrip("**").strip()
+                        if item:
+                            return item[:200]  # Limit length
 
         # Fallback: first sentence of summary
-        sentences = summary.split('.')
-        if sentences:
-            return sentences[0].strip() + "."
+        # Remove markdown headers first
+        clean_summary = summary
+        for marker in ["**논문 요약:**", "### ", "## ", "# ", "**"]:
+            clean_summary = clean_summary.replace(marker, "")
 
-        return ""
+        sentences = clean_summary.split('.')
+        for sentence in sentences:
+            s = sentence.strip()
+            if len(s) > 10:  # Skip very short fragments
+                return s + "."
+
+        return summary[:100] if summary else ""
 
     def export_paper(
         self,
