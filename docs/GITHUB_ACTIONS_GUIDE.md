@@ -1,232 +1,228 @@
-# GitHub Actions 설정 가이드
+# AI Research Curator - 사용 가이드
 
-이 문서는 Paper Digest AI Agent를 GitHub Actions에서 자동으로 실행하기 위한 설정 방법을 설명합니다.
-
-## 목차
-
-1. [사전 요구사항](#사전-요구사항)
-2. [GitHub Secrets 설정](#github-secrets-설정)
-3. [워크플로우 설정](#워크플로우-설정)
-4. [수동 실행 방법](#수동-실행-방법)
-5. [자동 스케줄 실행](#자동-스케줄-실행)
-6. [문제 해결](#문제-해결)
+최신 생명과학/AI 논문을 자동으로 검색하고, AI로 한국어 요약을 생성하는 도구입니다.
+GitHub Actions를 통해 **서버나 PC 없이도** 자동으로 실행됩니다.
 
 ---
 
-## 사전 요구사항
+## 전체 흐름
 
-- GitHub 계정
-- 이 저장소를 Fork하거나 Clone한 본인의 GitHub 저장소
-- 이메일 주소 (PubMed API 접근용)
-
----
-
-## GitHub Secrets 설정
-
-GitHub Actions에서 실행하려면 반드시 **Secrets**를 설정해야 합니다.
-
-### 필수 Secret
-
-| Secret 이름 | 설명 | 필수 여부 |
-|------------|------|----------|
-| `PUBMED_EMAIL` | PubMed API 접근 및 Unpaywall API용 이메일 | **필수** |
-
-### 선택적 Secrets (클라우드 LLM 사용 시)
-
-기본적으로 GitHub Actions는 **Ollama**를 자동 설치하여 사용합니다.
-클라우드 LLM API를 사용하고 싶다면 아래 시크릿을 설정하세요.
-
-| Secret 이름 | 설명 | 필수 여부 |
-|------------|------|----------|
-| `ANTHROPIC_API_KEY` | Claude API 키 | 선택 |
-| `OPENAI_API_KEY` | OpenAI API 키 | 선택 |
-| `GOOGLE_API_KEY` | Google Gemini API 키 | 선택 |
-
-### Secret 설정 방법
-
-1. GitHub 저장소 페이지로 이동합니다.
-
-2. 상단 메뉴에서 **Settings** 클릭
-
-   ![Settings](https://docs.github.com/assets/images/help/repository/repo-actions-settings.png)
-
-3. 왼쪽 사이드바에서 **Secrets and variables** → **Actions** 클릭
-
-4. **New repository secret** 버튼 클릭
-
-5. Secret 정보 입력:
-   - **Name**: `PUBMED_EMAIL`
-   - **Secret**: 본인 이메일 주소 (예: `myemail@example.com`)
-
-6. **Add secret** 버튼 클릭
-
-7. 설정 완료 확인:
-   ```
-   Repository secrets
-   ├── PUBMED_EMAIL ✓
-   └── (선택적) ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY
-   ```
-
----
-
-## 워크플로우 설정
-
-### 기본 설정
-
-워크플로우 파일은 `.github/workflows/paper_scraper.yml`에 위치합니다.
-
-### LLM 설정
-
-GitHub Actions에서는 **Ollama**가 자동으로 설치되어 사용됩니다.
-
-- 모델: `llama3.1:8b` (약 4GB)
-- 첫 실행 시 모델 다운로드에 5-10분 소요
-- 이후 실행에서는 캐시된 모델 사용 (빠름)
-
-### config.yaml 설정
-
-`config/config.yaml` 파일에서 LLM 설정이 다음과 같이 되어 있어야 합니다:
-
-```yaml
-ai:
-  llm_provider: ollama  # GitHub Actions에서 Ollama 사용
-  ollama:
-    model: llama3.1:8b
-    base_url: http://localhost:11434
-    max_tokens: 4096
+```
+1. 이 저장소를 Fork
+2. Secret 1개 설정 (이메일)
+3. 끝! 매주 자동 실행 → 결과물 다운로드
 ```
 
 ---
 
-## 수동 실행 방법
+## 1단계: 저장소 Fork
 
-### GitHub에서 직접 실행
+1. 이 저장소 페이지 상단의 **Fork** 버튼 클릭
+2. 본인의 GitHub 계정으로 Fork 완료
 
-1. GitHub 저장소 페이지로 이동
-
-2. **Actions** 탭 클릭
-
-3. 왼쪽에서 **Paper Digest** 워크플로우 선택
-
-4. **Run workflow** 버튼 클릭
-
-5. 옵션 설정 (선택사항):
-   - **Maximum papers to process**: 처리할 최대 논문 수 (기본: 5)
-   - **Days to look back**: 검색할 기간 (기본: 7일)
-
-6. **Run workflow** 버튼 클릭하여 실행
-
-### 실행 결과 확인
-
-1. **Actions** 탭에서 실행 중인 워크플로우 클릭
-
-2. 각 단계별 로그 확인 가능
-
-3. 완료 후 **Artifacts** 섹션에서 결과물 다운로드:
-   - `paper-digest-report`: PDF 리포트
-   - `paper-digest-html`: HTML 리포트
-   - `obsidian-notes`: Obsidian 마크다운 노트
+> Fork하면 GitHub Actions 워크플로우가 함께 복사됩니다.
 
 ---
 
-## 자동 스케줄 실행
+## 2단계: Secret 설정 (필수)
 
-기본적으로 **매주 수요일 오전 9시 (한국 시간)**에 자동 실행됩니다.
+Fork한 저장소에서 **딱 1개**의 Secret만 설정하면 됩니다.
 
-### 스케줄 변경 방법
+### 설정 방법
 
-`.github/workflows/paper_scraper.yml` 파일의 `cron` 설정을 수정하세요:
+1. Fork한 저장소 페이지에서 **Settings** 탭 클릭
+2. 왼쪽 메뉴에서 **Secrets and variables** → **Actions** 클릭
+3. **New repository secret** 버튼 클릭
+4. 아래 내용 입력:
+   - **Name**: `PUBMED_EMAIL`
+   - **Secret**: 본인 이메일 주소 (예: `myemail@gmail.com`)
+5. **Add secret** 클릭
+
+> PubMed API 접근에 이메일이 필요합니다. 어떤 이메일이든 상관없습니다.
+
+---
+
+## 3단계: 실행하기
+
+### 자동 실행 (기본 설정)
+
+설정 완료 후, **매주 수요일 오전 9시 (한국 시간)**에 자동 실행됩니다.
+아무것도 안 해도 됩니다.
+
+### 수동 실행 (바로 테스트하고 싶을 때)
+
+1. Fork한 저장소에서 **Actions** 탭 클릭
+2. 왼쪽에서 **Paper Digest** 선택
+3. **Run workflow** 버튼 클릭
+4. 옵션 설정 (선택):
+   - **Maximum papers to process**: 처리할 논문 수 (기본 5, 줄이면 더 빠름)
+   - **Days to look back**: 검색 기간 (기본 7일)
+5. **Run workflow** 클릭
+
+> GitHub Actions CPU에서 Ollama가 실행되므로 논문 5편 기준 약 1~2시간 소요됩니다.
+
+---
+
+## 4단계: 결과물 다운로드
+
+1. **Actions** 탭에서 완료된 워크플로우 클릭
+2. 페이지 하단 **Artifacts** 섹션에서 다운로드:
+
+| 파일명 | 내용 | 설명 |
+|--------|------|------|
+| `paper-digest-html` | HTML 리포트 | 브라우저에서 바로 열어서 볼 수 있음 |
+| `paper-digest-report` | PDF 리포트 | 인쇄/공유용 |
+| `obsidian-notes` | Obsidian 마크다운 | Obsidian 앱 사용자용 노트 |
+
+### 결과물에 포함되는 내용
+
+- 논문별 한국어 요약 (핵심 발견, 방법론, 의의)
+- Abstract 영한 대조 번역
+- 논문 Figure 이미지 및 한국어 해설
+- 연구 흐름 다이어그램 (Mermaid)
+
+---
+
+## 검색 키워드 커스터마이징
+
+기본 검색 키워드를 본인의 연구 분야에 맞게 변경할 수 있습니다.
+
+`config/config.yaml` 파일을 수정하세요:
+
+```yaml
+search:
+  keywords:
+    # 본인의 연구 분야 키워드로 변경
+    - single-cell RNA-seq
+    - spatial transcriptomics
+    - cancer genomics
+    - CRISPR screen
+    # 원하는 키워드 추가...
+
+  journals:
+    # 검색할 저널 목록
+    - Nature
+    - Science
+    - Cell
+    # 원하는 저널 추가...
+
+  max_papers: 5          # 처리할 최대 논문 수
+  days_lookback: 7       # 최근 며칠간의 논문 검색
+```
+
+---
+
+## 자동 실행 스케줄 변경
+
+`.github/workflows/paper_scraper.yml` 파일에서 `cron` 설정을 수정하세요:
 
 ```yaml
 on:
   schedule:
-    # 매주 수요일 오전 9시 (한국 시간) = UTC 0시
-    - cron: '0 0 * * 3'
+    - cron: '0 0 * * 3'  # 매주 수요일 오전 9시 (KST)
 ```
 
-### Cron 표현식 예시
-
-| 표현식 | 설명 |
-|--------|------|
+| 예시 | 설명 |
+|------|------|
 | `0 0 * * 3` | 매주 수요일 오전 9시 (KST) |
 | `0 0 * * 1,3,5` | 월, 수, 금 오전 9시 (KST) |
 | `0 0 * * *` | 매일 오전 9시 (KST) |
 | `0 0 1 * *` | 매월 1일 오전 9시 (KST) |
 
-> **참고**: GitHub Actions의 cron은 UTC 기준입니다. 한국 시간(KST)은 UTC+9입니다.
+> GitHub Actions의 cron은 UTC 기준입니다. 한국 시간(KST) = UTC + 9시간.
+
+---
+
+## 로컬에서 실행하기 (선택사항)
+
+GitHub Actions 대신 본인 PC에서 직접 실행할 수도 있습니다. GPU가 있으면 훨씬 빠릅니다.
+
+### 1. Ollama 설치
+
+```bash
+# macOS / Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 모델 다운로드
+ollama pull llama3.1:8b
+```
+
+### 2. 프로젝트 설치
+
+```bash
+git clone https://github.com/본인계정/ai-research-curator.git
+cd ai-research-curator
+pip install -r requirements.txt
+```
+
+### 3. 환경변수 설정
+
+`.env` 파일을 생성하세요:
+
+```bash
+PUBMED_EMAIL=myemail@gmail.com
+```
+
+### 4. 실행
+
+```bash
+python -m src.main --config config/config.yaml --max-papers 5 --days 7
+```
+
+결과물은 `output/` 폴더에 저장됩니다:
+- `output/reports/` - HTML, PDF 리포트
+- `output/obsidian/` - Obsidian 마크다운 노트
+
+### 로컬 vs GitHub Actions 비교
+
+| 항목 | 로컬 실행 | GitHub Actions |
+|------|----------|----------------|
+| 설치 | Ollama 직접 설치 | 자동 설치 |
+| 속도 | 빠름 (GPU 사용 시) | 느림 (CPU만 사용, 1~2시간) |
+| 비용 | 전기세 | 무료 (월 2,000분 제한) |
+| 자동화 | 직접 cron 설정 | 기본 제공 |
+| 결과 저장 | `output/` 폴더 | Artifacts 다운로드 |
 
 ---
 
 ## 문제 해결
 
-### 1. "PUBMED_EMAIL secret is required" 에러
+### "PUBMED_EMAIL secret is required" 에러
 
-```
-❌ ERROR: PUBMED_EMAIL secret is required but not set!
-```
+→ [2단계: Secret 설정](#2단계-secret-설정-필수)을 완료하세요.
 
-**해결 방법**: [GitHub Secrets 설정](#github-secrets-설정) 섹션을 참고하여 `PUBMED_EMAIL` 시크릿을 설정하세요.
+### 'Paper' object has no attribute 'article_type' 에러
 
-### 2. Ollama 모델 다운로드 실패
+→ 저장소가 최신 버전인지 확인하세요. Fork한 저장소에서 **Sync fork** 버튼을 눌러 업데이트하세요.
 
-```
-Error: failed to pull model
-```
+### 실행 시간이 너무 오래 걸림
 
-**해결 방법**:
-- GitHub Actions 재실행 (일시적인 네트워크 문제일 수 있음)
-- 더 작은 모델 사용 (`llama3.2:3b` 등)
+→ `max_papers` 값을 줄이세요 (예: 3). 논문 1편당 약 15~25분 소요됩니다.
 
-### 3. 실행 시간 초과 (Timeout)
+### "No papers found" 메시지
 
-GitHub Actions 무료 플랜은 작업당 최대 6시간입니다.
+→ `days_lookback` 값을 늘리거나, `config/config.yaml`에서 키워드를 확인하세요.
 
-**해결 방법**:
-- `max_papers` 값을 줄이세요 (예: 3개)
-- 더 작은 모델 사용
+### Ollama 모델 다운로드 실패
 
-### 4. "No papers found" 메시지
+→ GitHub Actions를 재실행하세요. 일시적인 네트워크 문제일 수 있습니다.
 
-**원인**: 검색 조건에 맞는 새로운 논문이 없음
+### PDF 생성 실패
 
-**해결 방법**:
-- `days_lookback` 값을 늘리세요
-- `config/config.yaml`에서 키워드나 저널 목록 확인
-
-### 5. PDF 생성 실패
-
-```
-PDF generation failed (using HTML)
-```
-
-**원인**: WeasyPrint 의존성 문제
-
-**해결 방법**: HTML 리포트는 정상 생성되므로 HTML 파일 사용
+→ HTML 리포트는 정상 생성되므로 HTML 파일을 사용하세요.
 
 ---
 
-## 로컬 실행 vs GitHub Actions
+## FAQ
 
-| 항목 | 로컬 실행 | GitHub Actions |
-|------|----------|----------------|
-| Ollama 설치 | 수동 설치 필요 | 자동 설치 |
-| 모델 다운로드 | 최초 1회 | 매 실행 (캐시 사용) |
-| 실행 속도 | 빠름 (GPU 사용 가능) | 느림 (CPU만 사용) |
-| 비용 | 무료 (본인 PC) | 무료 (월 2000분 제한) |
-| 자동화 | cron 설정 필요 | 기본 제공 |
+**Q: 비용이 드나요?**
+A: GitHub Actions 무료 플랜 (월 2,000분)으로 충분합니다. 주 1회 실행 기준 약 월 480분 사용.
 
----
+**Q: API 키가 필요한가요?**
+A: 아닙니다. Ollama가 자동 설치되어 로컬 LLM으로 실행됩니다. 클라우드 API 키 없이 사용 가능합니다.
 
-## 추가 정보
+**Q: 검색 분야를 바꿀 수 있나요?**
+A: `config/config.yaml`에서 키워드와 저널 목록을 자유롭게 수정할 수 있습니다.
 
-- **저장소**: [GitHub Repository](https://github.com/4to1stfloor/ai-research-curator)
-- **이슈 리포트**: [GitHub Issues](https://github.com/4to1stfloor/ai-research-curator/issues)
-
----
-
-## 변경 이력
-
-| 날짜 | 변경 내용 |
-|------|----------|
-| 2025-01-27 | Ollama 자동 설치 기능 추가 |
-| 2025-01-27 | 최초 문서 작성 |
+**Q: Obsidian이 뭔가요?**
+A: 마크다운 기반 노트 앱입니다. Obsidian을 사용하지 않는다면 HTML 리포트만 사용하면 됩니다.
