@@ -4,7 +4,32 @@
       "doi": "10.1126/science.adt0559",
       "title": "IDH-mutant gliomas arise from glial progenitor cells harboring the initial driver mutation.",
       "added_date": "2026-01-09T09:24:23.691716"
+    },
+    {
+      "doi": "10.1093/nar/gkag072",
+      "title": "bayesReact: expression-coupled regulatory motif analysis detects microRNA activity across cancers, tissues, and at the single-cell level.",
+      "added_date": "2026-02-11T07:46:58.605598"
+    },
+    {
+      "doi": "10.1016/j.ccell.2026.01.005",
+      "title": "Male-biased Yap1-Cd276/B7-H3 axis for immune evasion in medulloblastoma.",
+      "added_date": "2026-02-11T07:46:58.605610"
+    },
+    {
+      "doi": "10.7554/eLife.108485",
+      "title": "Heterochronic transcription factor expression drives cone-dominant retina development in 13-lined ground squirrels.",
+      "added_date": "2026-02-11T07:46:58.605615"
+    },
+    {
+      "doi": "doi:10.1038/s41467-026-69247-w",
+      "title": "Ecological partitioning enables phage–antibiotic cooperation in a human <i>Pseudomonas</i> infection",
+      "added_date": "2026-02-11T07:46:58.605621"
+    },
+    {
+      "doi": "10.1371/journal.pcbi.1013954",
+      "title": "SpaLSTF: Diffusion-based generative model with BiLSTM and XCA-Transformer for spatial transcriptomics imputation",
+      "added_date": "2026-02-11T07:46:58.605628"
     }
   ],
-  "last_updated": "2026-01-09T09:24:23.692249"
+  "last_updated": "2026-02-11T07:46:58.605678"
 }
