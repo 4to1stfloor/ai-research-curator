@@ -108,10 +108,11 @@ schedule:
 
 # AI 설정
 ai:
-  # LLM 제공자: gemini, ollama, claude, openai
-  # GitHub Actions에서는 ollama 사용 불가 → gemini 사용
-  # 로컬 실행 시에는 ollama 사용 권장
-  llm_provider: ollama
+  # LLM 제공자: auto, claude_cli, claude, gemini, openai, ollama
+  # auto (권장): 자동 감지 - Claude CLI → API Key → Ollama 순서
+  # claude_cli: Claude 구독자용 (API 키 불필요)
+  # ollama: 로컬 LLM (무료, GPU 있으면 빠름)
+  llm_provider: auto
 
   # 요약 언어
   summarize_language: korean

@@ -83,6 +83,23 @@ Fork한 저장소에서 **딱 1개**의 Secret만 설정하면 됩니다.
 
 ---
 
+## AI 백엔드 (자동 감지)
+
+기본 설정(`llm_provider: auto`)에서 사용 가능한 AI를 자동으로 감지합니다:
+
+| 우선순위 | 백엔드 | 조건 | API 키 필요 |
+|---------|--------|------|------------|
+| 1순위 | **Claude CLI** | `claude` 명령어 설치됨 (Claude 구독자) | 불필요 |
+| 2순위 | **Claude API** | `ANTHROPIC_API_KEY` 환경변수 | 필요 |
+| 3순위 | **Gemini API** | `GOOGLE_API_KEY` 환경변수 | 필요 |
+| 4순위 | **OpenAI API** | `OPENAI_API_KEY` 환경변수 | 필요 |
+| 5순위 | **Ollama** | Ollama 서버 실행 중 | 불필요 |
+
+**Claude 구독자**: Claude Code가 설치되어 있으면 API 키 없이 자동으로 Claude를 사용합니다.
+**API 키 없는 사용자**: Ollama가 자동으로 사용됩니다 (GitHub Actions에서도 자동 설치).
+
+---
+
 ## 검색 키워드 커스터마이징
 
 기본 검색 키워드를 본인의 연구 분야에 맞게 변경할 수 있습니다.
@@ -219,7 +236,7 @@ python -m src.main --config config/config.yaml --max-papers 5 --days 7
 A: GitHub Actions 무료 플랜 (월 2,000분)으로 충분합니다. 주 1회 실행 기준 약 월 480분 사용.
 
 **Q: API 키가 필요한가요?**
-A: 아닙니다. Ollama가 자동 설치되어 로컬 LLM으로 실행됩니다. 클라우드 API 키 없이 사용 가능합니다.
+A: 아닙니다. Claude Code 구독자는 자동으로 Claude를 사용합니다. 구독이 없어도 Ollama가 자동 설치되어 실행됩니다.
 
 **Q: 검색 분야를 바꿀 수 있나요?**
 A: `config/config.yaml`에서 키워드와 저널 목록을 자유롭게 수정할 수 있습니다.

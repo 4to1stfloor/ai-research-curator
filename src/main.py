@@ -95,13 +95,62 @@ class PaperDigestPipeline:
         else:
             self.obsidian_exporter = None
 
+    @staticmethod
+    def _check_claude_cli() -> bool:
+        """Check if Claude CLI is available."""
+        import subprocess
+        try:
+            r = subprocess.run(
+                ["claude", "--version"],
+                capture_output=True, text=True, timeout=10
+            )
+            return r.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+
+    def _resolve_provider(self) -> str:
+        """Resolve LLM provider. 'auto' detects available backends.
+
+        Priority: Claude CLI → Anthropic API → Gemini API → OpenAI API → Ollama
+        """
+        provider = self.config.ai.llm_provider
+
+        if provider != "auto":
+            return provider
+
+        # 1순위: Claude CLI (구독만으로 사용, API 키 불필요)
+        if self._check_claude_cli():
+            console.print("[green]Auto-detect: Claude CLI found → Claude 구독 사용[/green]")
+            return "claude_cli"
+
+        # 2순위: Anthropic API Key
+        if self.env_config.anthropic_api_key:
+            console.print("[green]Auto-detect: ANTHROPIC_API_KEY found → Claude API 사용[/green]")
+            return "claude"
+
+        # 3순위: Gemini API Key
+        if self.env_config.google_api_key:
+            console.print("[green]Auto-detect: GOOGLE_API_KEY found → Gemini 사용[/green]")
+            return "gemini"
+
+        # 4순위: OpenAI API Key
+        if self.env_config.openai_api_key:
+            console.print("[green]Auto-detect: OPENAI_API_KEY found → OpenAI 사용[/green]")
+            return "openai"
+
+        # 5순위: Ollama (로컬 LLM)
+        console.print("[yellow]Auto-detect: API key 없음 → Ollama 사용[/yellow]")
+        return "ollama"
+
     @property
     def llm_client(self) -> LLMClient:
         """Lazy initialization of LLM client."""
         if self._llm_client is None:
-            provider = self.config.ai.llm_provider
+            provider = self._resolve_provider()
 
-            if provider == "claude":
+            if provider == "claude_cli":
+                self._llm_client = LLMClient.from_config(provider="claude_cli")
+            elif provider == "claude":
                 if not self.env_config.anthropic_api_key:
                     raise ValueError("ANTHROPIC_API_KEY required for Claude")
                 self._llm_client = LLMClient.from_config(

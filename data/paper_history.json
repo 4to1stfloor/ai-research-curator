@@ -1,35 +1,65 @@
 {
   "papers": [
     {
-      "doi": "10.1126/science.adt0559",
-      "title": "IDH-mutant gliomas arise from glial progenitor cells harboring the initial driver mutation.",
-      "added_date": "2026-01-09T09:24:23.691716"
+      "doi": "10.1371/journal.pcbi.1013867",
+      "title": "Network models for bridging denoising and identifying spatial domains of spatially resolved transcriptomics.",
+      "added_date": "2026-01-16T09:08:19.068469"
     },
     {
-      "doi": "10.1093/nar/gkag072",
-      "title": "bayesReact: expression-coupled regulatory motif analysis detects microRNA activity across cancers, tissues, and at the single-cell level.",
-      "added_date": "2026-02-11T07:46:58.605598"
+      "doi": "10.1038/s41467-025-67220-7",
+      "title": "Chamber-specific chromatin architecture guides functional interpretation of disease-associated Cis-regulatory elements in human cardiomyocytes.",
+      "added_date": "2026-01-16T09:08:19.068485"
     },
     {
-      "doi": "10.1016/j.ccell.2026.01.005",
-      "title": "Male-biased Yap1-Cd276/B7-H3 axis for immune evasion in medulloblastoma.",
-      "added_date": "2026-02-11T07:46:58.605610"
+      "doi": "10.1038/s41467-025-67315-1",
+      "title": "RAS/MEK/PI3K pathway inhibition augments response to CD40 agonism by targeting CD11b",
+      "added_date": "2026-01-16T09:08:19.068491"
     },
     {
-      "doi": "10.7554/eLife.108485",
-      "title": "Heterochronic transcription factor expression drives cone-dominant retina development in 13-lined ground squirrels.",
-      "added_date": "2026-02-11T07:46:58.605615"
+      "doi": "10.7554/eLife.92991",
+      "title": "Predicting the effect of CRISPR-Cas9-based epigenome editing.",
+      "added_date": "2026-01-16T09:08:19.068495"
     },
     {
-      "doi": "doi:10.1038/s41467-026-69247-w",
-      "title": "Ecological partitioning enables phage–antibiotic cooperation in a human <i>Pseudomonas</i> infection",
-      "added_date": "2026-02-11T07:46:58.605621"
+      "doi": "doi:10.1038/s41467-026-68389-1",
+      "title": "OCT4 enhances the firing efficiency of late DNA replication origins in mouse embryonic stem cells",
+      "added_date": "2026-01-16T09:08:19.068498"
     },
     {
-      "doi": "10.1371/journal.pcbi.1013954",
-      "title": "SpaLSTF: Diffusion-based generative model with BiLSTM and XCA-Transformer for spatial transcriptomics imputation",
-      "added_date": "2026-02-11T07:46:58.605628"
+      "doi": "10.1038/s41467-025-68201-6",
+      "title": "Endothelial stem cells of the retinal vasculature reside in the optic nerve.",
+      "added_date": "2026-01-27T08:47:21.708676"
+    },
+    {
+      "doi": "10.1126/sciadv.adx6539",
+      "title": "Steroid-dependent metabolic rewiring reveals novel therapeutic and imaging approaches for glioblastoma.",
+      "added_date": "2026-01-27T08:47:21.708703"
+    },
+    {
+      "doi": "10.1126/sciadv.aea3703",
+      "title": "Selective disruption of lipid peroxide homeostasis in intratumoral regulatory T cells by targeting FSP1 enhances cancer immunity.",
+      "added_date": "2026-01-27T08:47:21.708710"
+    },
+    {
+      "doi": "10.1038/s41467-026-68580-4",
+      "title": "Identification of Chlamydia pneumoniae and NLRP3 inflammasome activation in Alzheimer's disease retina.",
+      "added_date": "2026-01-27T08:47:21.708722"
+    },
+    {
+      "doi": "10.1371/journal.pgen.1011743",
+      "title": "Oculopharyngeal muscular dystrophy (OPMD) associated alanine expansion impairs the function of the nuclear polyadenosine RNA binding protein PABPN1 as revealed by proximity labeling and comparative proteomics",
+      "added_date": "2026-01-27T10:19:28.105911"
+    },
+    {
+      "doi": "10.7554/eLife.107000",
+      "title": "Phenylhydrazone-based endoplasmic reticulum proteostasis regulator compounds with enhanced biological activity",
+      "added_date": "2026-01-27T10:44:18.039253"
+    },
+    {
+      "doi": "10.1371/journal.pbio.3003592",
+      "title": "Dynamic auxin maxima regulate male-to-hermaphrodite conversion and de novo meristem formation in the fern <i>Ceratopteris</i> gametophytes",
+      "added_date": "2026-01-27T10:44:18.039278"
     }
   ],
-  "last_updated": "2026-02-11T07:46:58.605678"
+  "last_updated": "2026-01-27T10:44:18.039586"
 }

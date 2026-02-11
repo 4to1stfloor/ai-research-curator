@@ -1,5 +1,6 @@
-"""Unified LLM client for Claude, OpenAI, Ollama, and Gemini."""
+"""Unified LLM client for Claude CLI, Claude API, OpenAI, Ollama, and Gemini."""
 
+import subprocess
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -13,6 +14,45 @@ class BaseLLMClient(ABC):
     def generate(self, prompt: str, system: Optional[str] = None) -> str:
         """Generate text from prompt."""
         pass
+
+
+class ClaudeCLIClient(BaseLLMClient):
+    """Claude Code CLI client. Uses Claude subscription, no API key needed."""
+
+    def __init__(self):
+        """Initialize Claude CLI client. Verifies 'claude' command is available."""
+        if not self._check_available():
+            raise RuntimeError(
+                "Claude CLI not found. Install Claude Code: "
+                "https://docs.anthropic.com/en/docs/claude-code"
+            )
+
+    @staticmethod
+    def _check_available() -> bool:
+        """Check if Claude CLI is installed."""
+        try:
+            r = subprocess.run(
+                ["claude", "--version"],
+                capture_output=True, text=True, timeout=10
+            )
+            return r.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=2, max=30))
+    def generate(self, prompt: str, system: Optional[str] = None) -> str:
+        """Generate text using Claude CLI (claude --print -p)."""
+        full_prompt = prompt
+        if system:
+            full_prompt = f"{system}\n\n{prompt}"
+
+        r = subprocess.run(
+            ["claude", "--print", "-p", full_prompt],
+            capture_output=True, text=True, timeout=300
+        )
+        if r.returncode != 0:
+            raise RuntimeError(f"Claude CLI error: {r.stderr}")
+        return r.stdout.strip()
 
 
 class GeminiClient(BaseLLMClient):
@@ -285,7 +325,9 @@ class LLMClient:
         """
         self.provider = provider
 
-        if provider == "claude":
+        if provider == "claude_cli":
+            self._client = ClaudeCLIClient()
+        elif provider == "claude":
             self._client = ClaudeClient(
                 api_key=api_key,
                 model=model or "claude-sonnet-4-20250514",
@@ -344,7 +386,9 @@ class LLMClient:
         Returns:
             Configured LLMClient
         """
-        if provider == "claude":
+        if provider == "claude_cli":
+            return cls(provider="claude_cli")
+        elif provider == "claude":
             if not anthropic_key:
                 raise ValueError("ANTHROPIC_API_KEY required for Claude")
             config = claude_config or {}
