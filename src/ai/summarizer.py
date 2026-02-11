@@ -401,6 +401,11 @@ FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
    - "denoising" (O) / "노이즈 제거" (X)
    - "UMAP", "clustering", "cell type" (O) / 한글 음역 (X)
 2. 논문 내용에 기반해서만 설명하세요. 없는 내용을 지어내지 마세요.
+3. 바로 "#### Figure 1:" 형식으로 시작하세요. 서론, 인사말, 메타 설명 절대 금지:
+   - "이 논문의 Figure를 설명하겠습니다" (X)
+   - "Figure 파일이 아직 추출되지 않은 것 같습니다" (X)
+   - "PDF에서 직접 Figure 내용을 확인했으므로" (X)
+   금지! 바로 Figure 설명만 출력하세요.
 
 위 예시처럼 전문 용어를 영어로 유지하면서 Figure를 순서대로 설명해주세요.
 """
@@ -436,6 +441,12 @@ class FigureExplanationGenerator:
         )
 
         response = self.llm.generate(prompt)
+
+        # Post-process: remove AI preamble before first "#### Figure"
+        import re
+        fig_match = re.search(r'(####\s*Figure\s*\d)', response)
+        if fig_match:
+            response = response[fig_match.start():]
 
         # Post-process: fix incorrectly translated terminology first
         response = fix_summary_terminology(response)
