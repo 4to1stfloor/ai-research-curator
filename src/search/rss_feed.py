@@ -129,6 +129,30 @@ class RSSFeedSearcher:
             }
             is_open_access = journal in open_access_journals
 
+            # Determine article type from title or category
+            article_type = "Research Article"  # default
+            non_research_keywords = [
+                "Perspective", "Review", "Editorial", "Commentary",
+                "Opinion", "Letter", "Correspondence", "Erratum",
+                "Correction", "Retraction", "News", "Primer", "Viewpoint"
+            ]
+
+            # Check title for article type indicators
+            title_lower = title.lower()
+            for keyword in non_research_keywords:
+                if keyword.lower() in title_lower:
+                    article_type = keyword
+                    break
+
+            # Also check RSS category/tags if available
+            categories = entry.get("tags", []) or entry.get("categories", [])
+            for cat in categories:
+                cat_term = cat.get("term", "") if isinstance(cat, dict) else str(cat)
+                for keyword in non_research_keywords:
+                    if keyword.lower() in cat_term.lower():
+                        article_type = keyword
+                        break
+
             return Paper(
                 title=title,
                 doi=doi,
@@ -139,6 +163,7 @@ class RSSFeedSearcher:
                 url=url,
                 source=PaperSource.RSS,
                 is_open_access=is_open_access,
+                article_type=article_type,
             )
 
         except Exception as e:

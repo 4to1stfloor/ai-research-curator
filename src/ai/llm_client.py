@@ -59,23 +59,108 @@ class OllamaClient(BaseLLMClient):
 
     def __init__(
         self,
-        model: str = "llama3.1",
+        model: str = "llama3.1:8b",
         base_url: str = "http://localhost:11434",
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        auto_pull: bool = True
     ):
         """
         Initialize Ollama client.
 
         Args:
-            model: Model to use (llama3.1, mistral, etc.)
+            model: Model to use (llama3.1:8b, mistral, etc.)
             base_url: Ollama server URL
             max_tokens: Maximum tokens to generate
+            auto_pull: Automatically download model if not available
         """
         import requests
         self.model = model
         self.base_url = base_url
         self.max_tokens = max_tokens
         self.session = requests.Session()
+
+        # Check if Ollama is running and model is available
+        self._ensure_model_available(auto_pull)
+
+    def _check_ollama_running(self) -> bool:
+        """Check if Ollama server is running."""
+        try:
+            response = self.session.get(f"{self.base_url}/api/tags", timeout=5)
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def _get_available_models(self) -> list[str]:
+        """Get list of available models."""
+        try:
+            response = self.session.get(f"{self.base_url}/api/tags", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return [m["name"] for m in data.get("models", [])]
+        except Exception:
+            pass
+        return []
+
+    def _pull_model(self, model: str) -> bool:
+        """Pull/download a model from Ollama registry."""
+        import sys
+        print(f"[Ollama] Downloading model '{model}'... This may take a while.", file=sys.stderr)
+        try:
+            response = self.session.post(
+                f"{self.base_url}/api/pull",
+                json={"name": model, "stream": False},
+                timeout=1800  # 30 minutes for large models
+            )
+            if response.status_code == 200:
+                print(f"[Ollama] Model '{model}' downloaded successfully.", file=sys.stderr)
+                return True
+            else:
+                print(f"[Ollama] Failed to download model: {response.text}", file=sys.stderr)
+                return False
+        except Exception as e:
+            print(f"[Ollama] Error downloading model: {e}", file=sys.stderr)
+            return False
+
+    def _ensure_model_available(self, auto_pull: bool = True):
+        """Ensure the model is available, download if needed."""
+        import sys
+
+        # Check if Ollama is running
+        if not self._check_ollama_running():
+            raise RuntimeError(
+                f"Ollama server is not running at {self.base_url}. "
+                "Please start Ollama with 'ollama serve' or install from https://ollama.com"
+            )
+
+        # Get available models
+        available_models = self._get_available_models()
+
+        # Check if model is available (exact match or base name match)
+        model_base = self.model.split(":")[0]
+        model_available = any(
+            self.model == m or self.model.startswith(m.split(":")[0])
+            for m in available_models
+        ) or any(
+            model_base == m.split(":")[0]
+            for m in available_models
+        )
+
+        if model_available:
+            print(f"[Ollama] Model '{self.model}' is available.", file=sys.stderr)
+            return
+
+        print(f"[Ollama] Model '{self.model}' not found. Available: {available_models}", file=sys.stderr)
+
+        if auto_pull:
+            if self._pull_model(self.model):
+                return
+            else:
+                raise RuntimeError(f"Failed to download model '{self.model}'")
+        else:
+            raise RuntimeError(
+                f"Model '{self.model}' is not available. "
+                f"Please run 'ollama pull {self.model}' to download it."
+            )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=30))
     def generate(self, prompt: str, system: Optional[str] = None) -> str:

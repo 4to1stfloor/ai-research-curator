@@ -47,16 +47,48 @@ search:
     - PLOS Computational Biology
 
   # 검색 키워드 (OR 조건으로 검색)
+  # 생명과학/의생명 분야에 특화된 키워드만 사용
   keywords:
+    # Genomics & Transcriptomics
     - single-cell RNA-seq
     - scRNA-seq
     - spatial transcriptomics
+    - Long read RNA-seq
+    - multi-omics
+    - single-cell ATAC-seq
+    - cell atlas
+
+    # Epigenetics & Chromatin
+    - epigenome
+    - chromatin accessibility
+    - histone modification
+    - DNA methylation
+
+    # Cancer Biology
     - cancer genomics
     - tumor microenvironment
-    - machine learning
-    - deep learning
-    - artificial intelligence
-    - Long read RNA-seq
+    - tumor heterogeneity
+    - drug resistance cancer
+    - immunotherapy
+
+    # Cell Biology
+    - organoid
+    - stem cell differentiation
+    - lineage tracing
+    - cell fate
+
+    # Proteomics & Metabolomics
+    - proteomics
+    - metabolomics
+
+    # CRISPR & Gene Editing
+    - CRISPR screen
+    - gene editing
+
+    # AI in Biology
+    - deep learning genomics
+    - machine learning biology
+    - AI drug discovery
 
   # 가져올 최대 논문 수
   max_papers: 5
@@ -77,6 +109,8 @@ schedule:
 # AI 설정
 ai:
   # LLM 제공자: gemini, ollama, claude, openai
+  # GitHub Actions에서는 ollama 사용 불가 → gemini 사용
+  # 로컬 실행 시에는 ollama 사용 권장
   llm_provider: ollama
 
   # 요약 언어

@@ -52,6 +52,7 @@ class Paper:
 
     # Processing flags
     is_open_access: bool = False
+    article_type: str = ""  # "Research Article", "Review", "Perspective", etc.
 
     # Local paths (after download)
     local_pdf_path: Optional[str] = None

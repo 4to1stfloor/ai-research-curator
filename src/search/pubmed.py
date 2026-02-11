@@ -212,6 +212,38 @@ class PubMedSearcher:
                 if kw.text:
                     keywords.append(kw.text)
 
+            # Publication types
+            pub_types = []
+            for pt in article_elem.findall(".//PublicationTypeList/PublicationType"):
+                if pt.text:
+                    pub_types.append(pt.text)
+
+            # Determine article type
+            article_type = "Research Article"  # default
+            non_research_types = [
+                "Review", "Editorial", "Comment", "Letter", "News",
+                "Published Erratum", "Retracted Publication", "Biography",
+                "Historical Article", "Interview", "Lecture", "Guideline"
+            ]
+            for pt in pub_types:
+                if any(nrt.lower() in pt.lower() for nrt in non_research_types):
+                    article_type = pt
+                    break
+
+            # Also check abstract for Perspective/Review indicators
+            if article_type == "Research Article" and abstract:
+                abstract_lower = abstract.lower()
+                perspective_indicators = [
+                    "this perspective", "in this perspective",
+                    "this review", "in this review",
+                    "this commentary", "in this commentary",
+                    "this opinion", "this viewpoint"
+                ]
+                for indicator in perspective_indicators:
+                    if indicator in abstract_lower:
+                        article_type = "Perspective"
+                        break
+
             return Paper(
                 title=title,
                 doi=doi,
@@ -226,6 +258,7 @@ class PubMedSearcher:
                 pdf_url=pdf_url,
                 source=PaperSource.PUBMED,
                 is_open_access=is_open_access,
+                article_type=article_type,
             )
 
         except Exception as e:

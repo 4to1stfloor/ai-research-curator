@@ -7,6 +7,69 @@ from .llm_client import LLMClient
 from ..models import Paper
 
 
+def fix_summary_terminology(text: str) -> str:
+    """Fix incorrectly translated/transliterated scientific terminology in summaries.
+
+    LLMs often ignore instructions to keep technical terms in English.
+    This function forcibly corrects common mistranslations.
+    """
+    # Dictionary of wrong translations → correct English terms
+    replacements = {
+        # Omics - wrong transliterations
+        '트랜스크립톰': 'transcriptome',
+        '트랜스크립토믹스': 'transcriptomics',
+        '트랜스ptomics': 'transcriptomics',
+        '전사체 연구': 'transcriptomics',
+        '에피지놈': 'epigenome',
+        '에피겐': 'epigenome',
+        '에피지노믹': 'epigenomic',
+        '지놈': 'genome',
+        '지노믹': 'genomic',
+        '프로테옴': 'proteome',
+        '메타볼롬': 'metabolome',
+
+        # Spatial terms
+        '스페이셜리': 'spatially',
+        '스페이셜': 'spatial',
+        '레솔브드': 'resolved',
+        'spatially 레솔브드': 'spatially resolved',
+        '공간적으로 분리된': 'spatially resolved',
+        '공간적으로 해결된': 'spatially resolved',
+        '공간분해': 'spatially resolved',
+        '공간 전사체': 'spatial transcriptomics',
+
+        # Epigenetics terms
+        '뉴클리오솜': 'nucleosome',
+        '뉴클레오솜': 'nucleosome',
+        '핵소체': 'nucleosome',
+        '크로마틴': 'chromatin',
+        '히스톤': 'histone',
+        '메틸화': 'methylation',
+        '아세틸화': 'acetylation',
+
+        # Methods
+        '싱글셀': 'single-cell',
+        '단일세포': 'single-cell',
+
+        # Network/model terms
+        '스페이셜 트랜스크립톰 아뷰트 셀 네트워크': 'spatial transcriptomics Attribute Cell Network (stACN)',
+        '스페이셜 트랜스크립톰 아티뷰트 셀 네트워크': 'spatial transcriptomics Attribute Cell Network (stACN)',
+        '스페이셜 트랜스크립톰': 'spatial transcriptomics',
+        '아뷰트': 'attribute',
+        '아티뷰트': 'attribute',
+
+        # Common mistranslations
+        'facilite': '촉진',
+        'facilitates': '촉진',
+    }
+
+    result = text
+    for wrong, correct in replacements.items():
+        result = result.replace(wrong, correct)
+
+    return result
+
+
 def remove_llm_preamble(text: str) -> str:
     """Remove LLM preamble/introduction text from summaries.
 
@@ -93,34 +156,41 @@ def remove_non_korean_foreign_chars(text: str) -> str:
     return cleaned
 
 
-SUMMARIZE_SYSTEM_PROMPT = """당신은 생명과학/의학 분야 논문 요약 전문가입니다.
-
-**핵심 규칙:**
-1. **세포명, 조직명, 해부학 용어는 반드시 영어 그대로 유지:**
-   - melanocyte, fibroblast, macrophage, T cell, B cell, neuron → 영어 그대로
-   - neural crest, epidermis, dermis, adipose tissue → 영어 그대로
-   - 절대 음역 금지: "며느기" (X), "멜라노사이트" (X) → "melanocyte" (O)
-
-2. 전문 용어는 영어 그대로 사용하거나 공식 한국어 용어만 사용:
-   - epigenome → "epigenome" 또는 "후성유전체" (에피지놈 X)
-   - transcriptome → "transcriptome" 또는 "전사체"
-   - genome → "genome" 또는 "유전체" (지놈 X)
-   - chromatin → "chromatin" 또는 "염색질"
-   - CRISPR-Cas9, single-cell RNA-seq, spatial transcriptomics → 영어 그대로
-
-3. 음역(발음을 한글로 옮기기) 절대 금지:
-   - 금지 예시: 에피겐ôm, 트랜스크립톰, 지놈, 크로마틴, 며느기 등
-   - 영어 그대로 쓰거나 공식 번역어만 사용
-
-4. 유전자명, 단백질명, 기술명은 영어 그대로:
-   - p53, BRCA1, H3K27ac, dCas9-p300, UMAP, t-SNE, BMP, ID1
-
-5. 한글과 영어만 사용 (한자, 일본어, 기타 외국어, 특수문자 금지)"""
+SUMMARIZE_SYSTEM_PROMPT = """당신은 생명과학/의학 분야 논문 요약 전문가입니다. 전문 용어는 반드시 영어로 유지하세요."""
 
 # Full prompt when body text is available
-SUMMARIZE_PROMPT_FULL = """다음 논문을 한국어로 상세히 요약해주세요.
+SUMMARIZE_PROMPT_FULL = """다음 논문을 한국어로 요약해주세요.
 
-## 논문 정보
+## 예시 요약 (이 스타일을 정확히 따라주세요):
+
+**예시 논문**: "Spatially resolved transcriptomics reveals cell type heterogeneity"
+
+### 핵심 발견 (Key Findings)
+1. **Spatially resolved transcriptomics를 이용한 cell type mapping**: Tissue section에서 다양한 cell type의 spatial distribution을 확인하였다.
+2. **stACN model 개발**: Graph noise model과 joint tensor decomposition을 활용한 새로운 network model을 개발하였다.
+3. **성능 향상**: Adjusted Rand Index (ARI) 기준으로 기존 방법 대비 clustering 성능이 향상되었다.
+
+### 연구 방법 (Methods)
+- Spatially resolved transcriptomics (SRT) 데이터 분석
+- Graph noise model 기반 denoising
+- Joint tensor decomposition
+- 평가 지표: Adjusted Rand Index (ARI)
+
+### 연구 배경 및 동기 (Background)
+- SRT 데이터는 gene expression과 spatial information을 동시에 제공하지만 technical noise가 많다.
+- 기존 방법은 denoising과 spatial domain identification을 별도로 수행하여 성능이 저하된다.
+
+### 의의 및 한계 (Significance & Limitations)
+- 의의: Denoising과 spatial domain identification을 통합한 최초의 방법론
+- 한계: 특정 SRT platform에서만 검증됨
+
+### 한 줄 요약
+Spatially resolved transcriptomics data의 denoising과 spatial domain identification을 동시에 수행하는 stACN model을 제안하였다.
+
+---
+
+## 요약할 논문:
+
 - 제목: {title}
 - 저널: {journal}
 - 저자: {authors}
@@ -133,32 +203,42 @@ SUMMARIZE_PROMPT_FULL = """다음 논문을 한국어로 상세히 요약해주�
 
 ---
 
-**절대 준수: 전문 용어는 영어 그대로(single-cell RNA-seq, epigenome 등) 또는 공식 한국어(후성유전체, 전사체 등). 음역 금지(에피지놈 X).**
+**절대 규칙 (MUST FOLLOW):**
+1. 모든 전문 용어는 영어 그대로 쓰세요:
+   - "spatially resolved transcriptomics" (O) / "스페이셜리 리졸브드" (X)
+   - "spatial transcriptomics" (O) / "공간 전사체" (X)
+   - "denoising" (O) / "노이즈 제거" (X)
+   - "single-cell RNA-seq" (O) / "단일세포" (X)
+2. 초록과 본문에 있는 내용만 쓰세요. 없는 내용을 지어내지 마세요.
 
-다음 형식으로 요약해주세요:
-
-### 핵심 발견 (Key Findings)
-- 이 연구의 가장 중요한 발견 3-5개를 상세히 설명
-- 정량적 결과가 있다면 구체적인 수치 포함
-
-### 연구 방법 (Methods)
-- 사용된 주요 기술/방법론 (기술명은 영어로)
-- 데이터셋 정보 (샘플 수, 종류 등)
-
-### 연구 배경 및 동기 (Background)
-- 이 연구가 해결하고자 하는 문제
-
-### 의의 및 한계 (Significance & Limitations)
-- 이 연구의 기여점과 한계
-
-### 한 줄 요약
-이 논문의 핵심을 한 문장으로.
+위 예시처럼 전문 용어를 영어로 유지하면서 요약해주세요.
 """
 
 # Simplified prompt when only abstract is available (NO PDF)
 SUMMARIZE_PROMPT_ABSTRACT_ONLY = """다음 논문을 초록만 기반으로 한국어로 요약해주세요.
 
-## 논문 정보
+## 예시 요약 (이 스타일을 정확히 따라주세요):
+
+**예시 논문**: "Spatially resolved transcriptomics reveals cell type distributions"
+
+### 핵심 발견 (Key Findings)
+1. **Spatially resolved transcriptomics를 이용한 cell type mapping**: Tissue section에서 다양한 cell type의 spatial distribution을 확인하였다.
+2. **Denoising 방법론 개발**: stACN이라는 새로운 network model을 통해 data quality를 향상시켰다 (ARI score 개선).
+3. **Spatial domain identification**: Graph noise model과 joint tensor decomposition을 활용하여 spatial domain을 식별하였다.
+
+### 연구 방법 (Methods)
+- Spatially resolved transcriptomics (SRT) 데이터 분석
+- Graph noise model 기반 denoising
+- Joint tensor decomposition
+- Adjusted Rand Index (ARI)로 성능 평가
+
+### 한 줄 요약
+Spatially resolved transcriptomics data의 denoising과 spatial domain identification을 동시에 수행하는 stACN model을 제안하였다.
+
+---
+
+## 요약할 논문:
+
 - 제목: {title}
 - 저널: {journal}
 - 저자: {authors}
@@ -168,25 +248,15 @@ SUMMARIZE_PROMPT_ABSTRACT_ONLY = """다음 논문을 초록만 기반으로 한�
 
 ---
 
-**절대 준수:**
-1. 전문 용어는 영어 그대로 또는 공식 한국어(epigenome→후성유전체, 음역 금지)
-2. 한자 절대 금지 - 순수 한글과 영어만 사용
-3. 초록에 없는 정보를 지어내지 마세요!
+**절대 규칙 (MUST FOLLOW):**
+1. 모든 전문 용어는 영어 그대로 쓰세요:
+   - "spatially resolved transcriptomics" (O) / "스페이셜리 리졸브드" (X)
+   - "spatial transcriptomics" (O) / "공간 전사체" (X)
+   - "denoising" (O) / "노이즈 제거" (X)
+   - "single-cell RNA-seq" (O) / "단일세포" (X)
+2. 초록에 있는 내용만 쓰세요. 없는 내용을 지어내지 마세요.
 
-**중요: 이 논문은 PDF 본문을 확인할 수 없습니다. 초록에 명시된 내용만 기반으로 요약하세요.**
-
-다음 형식으로 요약해주세요:
-
-### 핵심 발견 (Key Findings)
-- 초록에서 언급된 주요 발견만 작성
-- 초록에 없는 내용은 추측하지 마세요
-
-### 연구 방법 (Methods)
-- 초록에 언급된 방법론만 간단히 기술
-- 상세 정보 없으면: "(초록에 상세 정보 없음)"
-
-### 한 줄 요약
-이 논문의 핵심을 한 문장으로.
+위 예시처럼 전문 용어를 영어로 유지하면서 요약해주세요.
 """
 
 
@@ -247,6 +317,9 @@ class PaperSummarizer:
         # Generate summary
         summary = self.llm.generate(prompt, system=SUMMARIZE_SYSTEM_PROMPT)
 
+        # Post-process: fix incorrectly translated terminology first
+        summary = fix_summary_terminology(summary)
+
         # Post-process to remove any Chinese/Japanese/Cyrillic characters
         summary = remove_non_korean_foreign_chars(summary)
 
@@ -291,44 +364,45 @@ class PaperSummarizer:
 # Prompt for generating figure explanations
 FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
 
-## 논문 제목
+## 예시 Figure 해설 (이 스타일을 정확히 따라주세요):
+
+#### Figure 1: Spatially resolved transcriptomics workflow
+**핵심 내용**: Spatially resolved transcriptomics 실험 workflow와 stACN model의 구조를 보여준다.
+**세부 설명**:
+- Panel A: stACN model의 전체 workflow. Input으로 SRT data를 받아 denoising과 spatial domain identification을 수행한다.
+- Panel B: Graph noise model을 통한 dual cell network 학습 과정.
+- Panel C: Joint tensor decomposition을 통한 cell feature 추출.
+
+#### Figure 2: Spatial domain identification 결과
+**핵심 내용**: stACN model의 spatial domain identification 결과를 기존 방법과 비교한다.
+**세부 설명**:
+- Panel A: Ground truth annotation과 stACN 결과 비교. Spatial domain이 정확하게 식별되었다.
+- Panel B: Adjusted Rand Index (ARI) score 비교. stACN이 기존 방법 대비 높은 성능을 보인다.
+
+---
+
+## 해설할 논문:
+
+### 논문 제목
 {title}
 
-## 논문 요약
+### 논문 요약
 {summary}
 
-## Figure Legend (논문에서 추출)
+### Figure Legend (논문에서 추출)
 {figure_legend}
 
 ---
 
-**절대 준수 규칙:**
-1. **전문 용어는 반드시 영어 그대로 유지**:
-   - 세포명: melanocyte, fibroblast, macrophage, T cell 등 → 영어 그대로
-   - 분자명: RNA, DNA, protein, gene 등 → 영어 그대로
-   - 기술명: single-cell RNA-seq, ATAC-seq, UMAP, t-SNE 등 → 영어 그대로
-   - 해부학: neural crest, epidermis, dermis 등 → 영어 그대로
-   - 음역 절대 금지: "며느기" (X), "멜라노사이트" (X) → "melanocyte" (O)
+**절대 규칙 (MUST FOLLOW):**
+1. 모든 전문 용어는 영어 그대로 쓰세요:
+   - "spatially resolved transcriptomics" (O) / "스페이셜리 리졸브드" (X)
+   - "spatial domain identification" (O) / "공간 도메인 식별" (X)
+   - "denoising" (O) / "노이즈 제거" (X)
+   - "UMAP", "clustering", "cell type" (O) / 한글 음역 (X)
+2. 논문 내용에 기반해서만 설명하세요. 없는 내용을 지어내지 마세요.
 
-2. 한자(漢字)와 다른 언어 절대 금지: 순수 한글과 영어만 사용
-
-3. **Figure는 반드시 번호 순서대로 설명** (Figure 1 → Figure 2 → Figure 3...)
-
-4. 해당 분야 대학원생이 이해할 수 있도록 설명하세요
-
-다음 형식으로 **번호 순서대로** Figure를 설명해주세요:
-
-#### Figure 1: (Figure 1 제목)
-**핵심 내용**: (이 Figure가 보여주는 가장 중요한 결과)
-**세부 설명**:
-- Panel별 주요 내용
-- 분석 방법 및 그래프 해석
-
-#### Figure 2: (Figure 2 제목)
-**핵심 내용**: ...
-**세부 설명**: ...
-
-(이후 Figure도 같은 형식으로 번호 순서대로)
+위 예시처럼 전문 용어를 영어로 유지하면서 Figure를 순서대로 설명해주세요.
 """
 
 
@@ -362,6 +436,9 @@ class FigureExplanationGenerator:
         )
 
         response = self.llm.generate(prompt)
+
+        # Post-process: fix incorrectly translated terminology first
+        response = fix_summary_terminology(response)
 
         # Post-process to remove any Chinese/Japanese/Cyrillic characters
         response = remove_non_korean_foreign_chars(response)

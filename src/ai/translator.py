@@ -8,39 +8,109 @@ from .summarizer import remove_non_korean_foreign_chars
 from ..models import Paper
 
 
+def fix_translation_terminology(text: str) -> str:
+    """Fix incorrectly translated/transliterated scientific terminology.
+
+    LLMs often ignore instructions to keep technical terms in English.
+    This function forcibly corrects common mistranslations.
+    """
+    # Dictionary of wrong translations → correct English terms
+    replacements = {
+        # Omics - wrong transliterations
+        '트랜스크립톰': 'transcriptome',
+        '트랜스크립토믹스': 'transcriptomics',
+        '트랜스ptomics': 'transcriptomics',
+        '전사체 연구': 'transcriptomics',
+        '전사체': 'transcriptome',
+        '에피지놈': 'epigenome',
+        '에피겐': 'epigenome',
+        '에피지노믹': 'epigenomic',
+        '후성유전체': 'epigenome',
+        '지놈': 'genome',
+        '지노믹': 'genomic',
+        '유전체': 'genome',
+        '프로테옴': 'proteome',
+        '단백체': 'proteome',
+        '메타볼롬': 'metabolome',
+        '대사체': 'metabolome',
+
+        # Spatial terms
+        '스페이셜리': 'spatially',
+        '스페이셜': 'spatial',
+        '레솔브드': 'resolved',
+        'spatially 레솔브드': 'spatially resolved',
+        '공간적으로 분리된': 'spatially resolved',
+        '공간적으로 해결된': 'spatially resolved',
+        '공간분해': 'spatially resolved',
+        '공간 전사체': 'spatial transcriptomics',
+
+        # Epigenetics terms
+        '뉴클리오솜': 'nucleosome',
+        '뉴클레오솜': 'nucleosome',
+        '핵소체': 'nucleosome',
+        '크로마틴': 'chromatin',
+        '염색질': 'chromatin',
+        '히스톤': 'histone',
+        '메틸화': 'methylation',
+        '아세틸화': 'acetylation',
+
+        # Methods
+        '싱글셀': 'single-cell',
+        '단일세포': 'single-cell',
+
+        # Network/model terms (for stACN paper)
+        '스페이셜 트랜스크립톰 아뷰트 셀 네트워크': 'spatial transcriptomics Attribute Cell Network (stACN)',
+        '스페이셜 트랜스크립톰 아티뷰트 셀 네트워크': 'spatial transcriptomics Attribute Cell Network (stACN)',
+        '스페이셜 트랜스크립톰': 'spatial transcriptomics',
+        '아뷰트': 'attribute',
+        '아티뷰트': 'attribute',
+
+        # Common mistranslations
+        'facilite': '촉진',
+        'facilitates': '촉진',
+        '유전자 표현': 'gene expression',
+        '유전자 발현': 'gene expression',
+    }
+
+    result = text
+    for wrong, correct in replacements.items():
+        result = result.replace(wrong, correct)
+
+    return result
+
+
 TRANSLATION_SYSTEM_PROMPT = """You are a translator specializing in biomedical papers. Translate English sentences to natural Korean.
 
-RULES:
-1. Keep ALL technical terms in English:
-   - Cell names: melanocyte, fibroblast, macrophage, T cell, B cell, neuron
-   - Anatomy: neural crest, epidermis, dermis, adipose tissue
-   - Molecules: RNA, DNA, protein, BMP, ID1, p53, BRAF
-   - Methods: single-cell RNA-seq, ATAC-seq, UMAP, t-SNE, fMRI
-   - NEVER transliterate: "melanocyte" stays as "melanocyte" (NOT "멜라노사이트" or "며느기")
-2. Use simple, natural Korean grammar
-3. Output format must be exactly: [EN] English [KO] Korean"""
+CRITICAL RULE: Keep ALL scientific/technical terms in ENGLISH. Do NOT transliterate to Korean."""
 
-TRANSLATION_PROMPT_TEMPLATE = """Translate this abstract sentence by sentence.
+TRANSLATION_PROMPT_TEMPLATE = """Translate this biomedical abstract sentence by sentence.
 
-Abstract:
+## EXAMPLE TRANSLATIONS (follow this style exactly):
+
+[EN] Spatially resolved transcriptomics enables simultaneous capture of gene expression and spatial information.
+[KO] Spatially resolved transcriptomics는 gene expression과 공간 정보를 동시에 캡처할 수 있게 한다.
+
+[EN] Single-cell RNA-seq analysis revealed distinct melanocyte populations in the tumor microenvironment.
+[KO] Single-cell RNA-seq 분석을 통해 tumor microenvironment에서 distinct melanocyte population을 확인하였다.
+
+[EN] The epigenome profiling using ChIP-seq and ATAC-seq demonstrated changes in chromatin accessibility.
+[KO] ChIP-seq과 ATAC-seq을 사용한 epigenome profiling은 chromatin accessibility의 변화를 보여주었다.
+
+[EN] We identified nucleosome positioning patterns that facilitate transcription factor binding.
+[KO] 우리는 transcription factor binding을 촉진하는 nucleosome positioning 패턴을 확인하였다.
+
+[EN] UMAP visualization showed clustering of fibroblasts and macrophages based on their transcriptome profiles.
+[KO] UMAP 시각화는 transcriptome profile을 기반으로 fibroblast와 macrophage의 clustering을 보여주었다.
+
+## NOW TRANSLATE THIS ABSTRACT:
+
 {abstract}
 
-Output format (follow exactly):
+## OUTPUT FORMAT:
+[EN] English sentence.
+[KO] Korean translation (keep technical terms in English).
 
-[EN] First English sentence.
-[KO] 첫 번째 문장의 한국어 번역.
-
-[EN] Second English sentence.
-[KO] 두 번째 문장의 한국어 번역.
-
-CRITICAL Rules:
-- Keep ALL technical terms in English:
-  * Cell names: melanocyte, fibroblast, neuron, T cell → Keep as English
-  * Anatomy: neural crest, epidermis → Keep as English
-  * Methods: single-cell RNA-seq, ATAC-seq → Keep as English
-  * Molecules: BMP, ID1, BRAF → Keep as English
-- NEVER transliterate cell names (NO "멜라노사이트", NO "며느기")
-- Write natural Korean sentences
+Remember: transcriptome, epigenome, spatial transcriptomics, single-cell RNA-seq, nucleosome, chromatin, melanocyte, fibroblast, macrophage, UMAP, t-SNE, gene names → ALL stay in ENGLISH.
 """
 
 
@@ -158,9 +228,12 @@ class AbstractTranslator:
         if current_en and current_ko:
             pairs.append({"en": current_en, "ko": current_ko})
 
-        # Post-process: remove Chinese/Japanese/Cyrillic characters from Korean translations
+        # Post-process: fix terminology and remove foreign characters
         for pair in pairs:
             if 'ko' in pair:
+                # First fix incorrectly translated terminology
+                pair['ko'] = fix_translation_terminology(pair['ko'])
+                # Then remove any remaining foreign characters
                 pair['ko'] = remove_non_korean_foreign_chars(pair['ko'])
 
         return pairs
