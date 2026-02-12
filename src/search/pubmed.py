@@ -138,15 +138,15 @@ class PubMedSearcher:
             if article_elem is None:
                 return None
 
-            # Title
+            # Title - use itertext() to capture text across sub/sup tags
             title_elem = article_elem.find(".//ArticleTitle")
-            title = title_elem.text if title_elem is not None else ""
+            title = "".join(title_elem.itertext()) if title_elem is not None else ""
 
-            # Abstract
+            # Abstract - use itertext() to capture text across sub/sup tags
             abstract_parts = []
             for abstract_text in article_elem.findall(".//AbstractText"):
                 label = abstract_text.get("Label", "")
-                text = abstract_text.text or ""
+                text = "".join(abstract_text.itertext())
                 if label:
                     abstract_parts.append(f"{label}: {text}")
                 else:
