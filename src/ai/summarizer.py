@@ -82,6 +82,8 @@ def remove_llm_preamble(text: str) -> str:
 
     # Patterns to remove at the start of the text
     preamble_patterns = [
+        # "# 논문 요약: ..." title line added by LLM
+        r'^#\s*논문\s*요약[:\s][^\n]*\n?',
         # "네, ~하겠습니다/드리겠습니다" pattern
         r'^네[,.]?\s*[^\n]*(?:하겠습니다|드리겠습니다|겠습니다)[.!]?\s*',
         # "알겠습니다" pattern

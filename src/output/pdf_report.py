@@ -605,6 +605,11 @@ class PDFReportGenerator:
                     html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
                     in_list = False
                 html_lines.append(f'<h3>{line[3:]}</h3>')
+            elif line.startswith('# '):
+                if in_list:
+                    html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
+                    in_list = False
+                html_lines.append(f'<h3>{line[2:]}</h3>')
             elif line.startswith('- '):
                 if not in_list or list_type != 'ul':
                     if in_list:
