@@ -74,6 +74,9 @@ def remove_llm_preamble(text: str) -> str:
     """Remove LLM preamble/introduction text from summaries.
 
     Removes common patterns like:
+    - "# 논문 요약: ..." / "## 논문 요약: ..."
+    - "# Paper Title 요약"
+    - Paper title as first heading (not a section heading)
     - "네, ~하겠습니다."
     - "알겠습니다. ~드리겠습니다."
     - "다음은 ~입니다."
@@ -82,8 +85,10 @@ def remove_llm_preamble(text: str) -> str:
 
     # Patterns to remove at the start of the text
     preamble_patterns = [
-        # "# 논문 요약: ..." title line added by LLM
-        r'^#\s*논문\s*요약[:\s][^\n]*\n?',
+        # "# 논문 요약: ..." or "## 논문 요약: ..." title line added by LLM
+        r'^#{1,4}\s*논문\s*요약[:\s][^\n]*\n?',
+        # "# Title 요약" - paper title heading ending with "요약"
+        r'^#{1,4}\s+[^\n]+요약\s*\n?',
         # "네, ~하겠습니다/드리겠습니다" pattern
         r'^네[,.]?\s*[^\n]*(?:하겠습니다|드리겠습니다|겠습니다)[.!]?\s*',
         # "알겠습니다" pattern
@@ -103,6 +108,20 @@ def remove_llm_preamble(text: str) -> str:
     result = text
     for pattern in preamble_patterns:
         result = re.sub(pattern, '', result, flags=re.MULTILINE)
+
+    # Remove first heading if it's not an expected section name
+    # (catches LLM outputting paper title as first heading)
+    result = result.strip()
+    expected_sections = [
+        '핵심 발견', 'Key Findings', '연구 방법', 'Methods',
+        '연구 배경', 'Background', '의의', 'Significance',
+        '한 줄 요약', 'One-line Summary',
+    ]
+    first_line_match = re.match(r'^(#{1,4})\s+([^\n]+)\n?', result)
+    if first_line_match:
+        heading_text = first_line_match.group(2).strip()
+        if not any(section in heading_text for section in expected_sections):
+            result = result[first_line_match.end():]
 
     # Also remove "---" separator lines that appear after preamble removal
     result = re.sub(r'^\s*-{3,}\s*\n?', '', result, flags=re.MULTILINE)
@@ -503,11 +522,24 @@ class FigureExplanationGenerator:
 
         response = self.llm.generate(prompt)
 
-        # Post-process: remove AI preamble before first "#### Figure"
+        # Post-process: remove AI preamble before first figure heading
         import re
-        fig_match = re.search(r'(####\s*Figure\s*\d)', response)
+        fig_match = re.search(r'#+\s*Figure\s*\d', response)
         if fig_match:
             response = response[fig_match.start():]
+        else:
+            # No markdown figure headings - check for meta-commentary
+            meta_patterns = [
+                r'이미지를?\s*확인해야',
+                r'이미지\s*파일.*경로',
+                r'공유해\s*주시',
+                r'알려주시.*경로',
+                r'Figure\s*이미지.*확인',
+                r'정확한\s*설명.*드리기\s*어렵',
+            ]
+            if any(re.search(p, response) for p in meta_patterns):
+                return ""
+            # Otherwise keep as-is (LLM may have used different formatting)
 
         # Post-process: fix incorrectly translated terminology first
         response = fix_summary_terminology(response)
