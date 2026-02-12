@@ -1,7 +1,26 @@
 """Deduplication checker for papers."""
 
+import re
+import unicodedata
+
 from ..models import Paper
 from ..storage.history import PaperHistoryManager
+
+
+def normalize_title(title: str) -> str:
+    """Normalize a paper title for comparison.
+
+    Strips punctuation, whitespace, accents, and lowercases
+    so that minor formatting differences don't prevent dedup.
+    """
+    t = title.lower().strip()
+    # Remove accents/diacritics
+    t = unicodedata.normalize('NFKD', t)
+    t = ''.join(c for c in t if not unicodedata.combining(c))
+    # Remove punctuation and extra whitespace
+    t = re.sub(r'[^\w\s]', '', t)
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t
 
 
 class DeduplicationChecker:
@@ -17,17 +36,25 @@ class DeduplicationChecker:
         self.history = history_manager
         self._seen_in_session: set[str] = set()
 
-    def _get_paper_key(self, paper: Paper) -> str:
-        """Get unique key for paper."""
+    def _get_paper_keys(self, paper: Paper) -> list[str]:
+        """Get all unique keys for a paper (DOI + normalized title).
+
+        Returns multiple keys so a paper can be matched by either DOI or title.
+        """
+        keys = []
         if paper.doi:
-            return f"doi:{paper.doi.lower()}"
-        return f"title:{paper.title.lower().strip()}"
+            keys.append(f"doi:{paper.doi.lower().strip()}")
+        if paper.pmid:
+            keys.append(f"pmid:{paper.pmid.strip()}")
+        # Always add normalized title as a fallback key
+        keys.append(f"title:{normalize_title(paper.title)}")
+        return keys
 
     def is_duplicate(self, paper: Paper) -> bool:
         """
         Check if paper is a duplicate.
 
-        Checks both history and current session.
+        Checks both history and current session using all keys (DOI + title).
 
         Args:
             paper: Paper to check
@@ -35,19 +62,20 @@ class DeduplicationChecker:
         Returns:
             True if duplicate
         """
-        key = self._get_paper_key(paper)
+        keys = self._get_paper_keys(paper)
 
-        # Check current session
-        if key in self._seen_in_session:
-            return True
+        # Check current session - match on ANY key
+        for key in keys:
+            if key in self._seen_in_session:
+                return True
 
         # Check history
         return self.history.is_duplicate(paper)
 
     def mark_as_seen(self, paper: Paper) -> None:
-        """Mark paper as seen in current session."""
-        key = self._get_paper_key(paper)
-        self._seen_in_session.add(key)
+        """Mark paper as seen in current session (registers all keys)."""
+        for key in self._get_paper_keys(paper):
+            self._seen_in_session.add(key)
 
     def filter_duplicates(self, papers: list[Paper]) -> list[Paper]:
         """

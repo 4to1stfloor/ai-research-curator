@@ -108,6 +108,51 @@ def remove_llm_preamble(text: str) -> str:
     return result.strip()
 
 
+def remove_meta_commentary(text: str) -> str:
+    """Remove AI meta-commentary about input text quality/completeness.
+
+    Removes patterns like:
+    - "제공된 초록과 본문이 불완전하여..."
+    - "본문에서 잘림"
+    - "전체 내용을 파악하기 어렵습니다"
+    """
+    import re
+
+    # Patterns for meta-commentary lines/sentences to remove
+    meta_patterns = [
+        # "제공된 ~가 불완전하여" full sentence
+        r'[^\n]*제공된[^\n]*불완전하여[^\n]*\n?',
+        # "문장이 중간에 끊김" meta note
+        r'[^\n]*문장이\s*중간에\s*끊[^\n]*\n?',
+        # "전체 내용을 파악하기 어렵" meta note
+        r'[^\n]*전체\s*내용을\s*파악하기\s*어렵[^\n]*\n?',
+        # "제공된 정보만을 바탕으로" meta note
+        r'[^\n]*제공된\s*정보만[^\n]*바탕으로[^\n]*\n?',
+        # "제공된 정보가 불완전" meta note
+        r'[^\n]*제공된\s*정보가\s*불완전[^\n]*\n?',
+        # "(구체적 ~은/는 본문에서 잘림)" parenthetical meta
+        r'\s*\([^)]*본문에서\s*잘림[^)]*\)',
+        # "(정보 부족)" parenthetical meta
+        r'\s*\([^)]*정보\s*부족[^)]*\)',
+        # "(본문에서 확인 불가)" parenthetical meta
+        r'\s*\([^)]*확인\s*불가[^)]*\)',
+        # "~ 파악 불가" at end of bullet
+        r'\s*파악\s*불가\s*$',
+    ]
+
+    result = text
+    for pattern in meta_patterns:
+        result = re.sub(pattern, '', result, flags=re.MULTILINE)
+
+    # Clean up empty list items
+    result = re.sub(r'^-\s*\*\*한계\*\*:\s*\n', '', result, flags=re.MULTILINE)
+
+    # Clean up multiple blank lines
+    result = re.sub(r'\n{3,}', '\n\n', result)
+
+    return result.strip()
+
+
 def remove_non_korean_foreign_chars(text: str) -> str:
     """Remove Chinese characters and other non-Korean foreign characters from text.
 
@@ -210,6 +255,14 @@ Spatially resolved transcriptomics data의 denoising과 spatial domain identific
    - "denoising" (O) / "노이즈 제거" (X)
    - "single-cell RNA-seq" (O) / "단일세포" (X)
 2. 초록과 본문에 있는 내용만 쓰세요. 없는 내용을 지어내지 마세요.
+3. 제공된 텍스트의 품질, 완전성, 잘림 여부에 대해 절대 언급하지 마세요:
+   - "제공된 초록과 본문이 불완전하여" (X)
+   - "문장이 중간에 끊김" (X)
+   - "본문에서 잘림" (X)
+   - "전체 내용을 파악하기 어렵습니다" (X)
+   - "제공된 정보만을 바탕으로" (X)
+   - "제공된 정보가 불완전하여" (X)
+   금지! 있는 내용만으로 자연스럽게 요약하세요.
 
 위 예시처럼 전문 용어를 영어로 유지하면서 요약해주세요.
 """
@@ -255,6 +308,11 @@ Spatially resolved transcriptomics data의 denoising과 spatial domain identific
    - "denoising" (O) / "노이즈 제거" (X)
    - "single-cell RNA-seq" (O) / "단일세포" (X)
 2. 초록에 있는 내용만 쓰세요. 없는 내용을 지어내지 마세요.
+3. 제공된 텍스트의 품질, 완전성, 잘림 여부에 대해 절대 언급하지 마세요:
+   - "제공된 초록이 불완전하여" (X)
+   - "정보가 제한적이어서" (X)
+   - "제공된 정보만을 바탕으로" (X)
+   금지! 있는 내용만으로 자연스럽게 요약하세요.
 
 위 예시처럼 전문 용어를 영어로 유지하면서 요약해주세요.
 """
@@ -276,7 +334,7 @@ class PaperSummarizer:
         self,
         paper: Paper,
         body_text: Optional[str] = None,
-        max_body_chars: int = 10000
+        max_body_chars: int = 20000
     ) -> str:
         """
         Summarize a paper.
@@ -293,10 +351,8 @@ class PaperSummarizer:
 
         # Choose prompt based on body text availability
         if body_text and len(body_text.strip()) > 100:
-            # Full prompt with body text
+            # Full prompt with body text (truncate silently without marker)
             body = body_text[:max_body_chars]
-            if len(body_text) > max_body_chars:
-                body += "\n... (truncated)"
 
             prompt = SUMMARIZE_PROMPT_FULL.format(
                 title=paper.title,
@@ -325,6 +381,9 @@ class PaperSummarizer:
 
         # Remove LLM preamble (e.g., "네, 전문가 관점에서...요약해 드리겠습니다")
         summary = remove_llm_preamble(summary)
+
+        # Remove AI meta-commentary about input quality/completeness
+        summary = remove_meta_commentary(summary)
 
         return summary
 

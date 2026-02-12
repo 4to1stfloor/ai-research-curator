@@ -1,6 +1,8 @@
 """Paper history management for deduplication."""
 
 import json
+import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -63,8 +65,17 @@ class PaperHistoryManager:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     def _normalize_title(self, title: str) -> str:
-        """Normalize title for comparison."""
-        return title.lower().strip()
+        """Normalize title for comparison.
+
+        Strips punctuation, whitespace, accents, and lowercases
+        so minor formatting differences don't prevent dedup.
+        """
+        t = title.lower().strip()
+        t = unicodedata.normalize('NFKD', t)
+        t = ''.join(c for c in t if not unicodedata.combining(c))
+        t = re.sub(r'[^\w\s]', '', t)
+        t = re.sub(r'\s+', ' ', t).strip()
+        return t
 
     def is_duplicate(self, paper: Paper) -> bool:
         """
