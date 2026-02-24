@@ -17,8 +17,15 @@ if [ -f "${SCRIPT_DIR}/.env" ]; then
     set +a
 fi
 
-# Run the pipeline
+# Pull latest code from GitHub
 cd "${SCRIPT_DIR}"
+echo "[Update] git pull..." >> "${LOG_FILE}"
+git pull --ff-only >> "${LOG_FILE}" 2>&1 || echo "[Update] git pull failed, using current version" >> "${LOG_FILE}"
+
+# Update dependencies if requirements changed
+pip install -r requirements.txt -q >> "${LOG_FILE}" 2>&1
+
+# Run the pipeline
 python3 -m src.main --config config/config.yaml >> "${LOG_FILE}" 2>&1
 
 echo "=== Completed: $(date) ===" >> "${LOG_FILE}"
