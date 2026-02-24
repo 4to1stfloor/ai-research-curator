@@ -1,90 +1,30 @@
 {
   "papers": [
     {
-      "doi": "10.1371/journal.pcbi.1013867",
-      "title": "Network models for bridging denoising and identifying spatial domains of spatially resolved transcriptomics.",
-      "added_date": "2026-01-16T09:08:19.068469"
+      "doi": "10.1126/sciadv.adz5645",
+      "title": "VMAT2 dysfunction impairs vesicular dopamine uptake, driving its oxidation and α-synuclein pathology in DJ-1-linked Parkinson's neurons.",
+      "added_date": "2026-02-13T08:17:48.182969"
     },
     {
-      "doi": "10.1038/s41467-025-67220-7",
-      "title": "Chamber-specific chromatin architecture guides functional interpretation of disease-associated Cis-regulatory elements in human cardiomyocytes.",
-      "added_date": "2026-01-16T09:08:19.068485"
+      "doi": "10.1126/sciadv.adz3323",
+      "title": "Silencer variants are key drivers of gene up-regulation in Alzheimer's disease.",
+      "added_date": "2026-02-13T08:17:48.183168"
     },
     {
-      "doi": "10.1038/s41467-025-67315-1",
-      "title": "RAS/MEK/PI3K pathway inhibition augments response to CD40 agonism by targeting CD11b",
-      "added_date": "2026-01-16T09:08:19.068491"
+      "doi": "10.1126/sciadv.aec3876",
+      "title": "E711-19 placement and orientation dictate CD8+ T cell response in structurally defined spherical nucleic acid vaccines.",
+      "added_date": "2026-02-13T08:17:48.183300"
     },
     {
-      "doi": "10.7554/eLife.92991",
-      "title": "Predicting the effect of CRISPR-Cas9-based epigenome editing.",
-      "added_date": "2026-01-16T09:08:19.068495"
+      "doi": "10.1126/sciadv.adx9159",
+      "title": "Matrix-bound nanovesicles as epigenetic modulators of myeloid cells.",
+      "added_date": "2026-02-13T08:17:48.183406"
     },
     {
-      "doi": "doi:10.1038/s41467-026-68389-1",
-      "title": "OCT4 enhances the firing efficiency of late DNA replication origins in mouse embryonic stem cells",
-      "added_date": "2026-01-16T09:08:19.068498"
-    },
-    {
-      "doi": "10.1038/s41467-025-68201-6",
-      "title": "Endothelial stem cells of the retinal vasculature reside in the optic nerve.",
-      "added_date": "2026-01-27T08:47:21.708676"
-    },
-    {
-      "doi": "10.1126/sciadv.adx6539",
-      "title": "Steroid-dependent metabolic rewiring reveals novel therapeutic and imaging approaches for glioblastoma.",
-      "added_date": "2026-01-27T08:47:21.708703"
-    },
-    {
-      "doi": "10.1126/sciadv.aea3703",
-      "title": "Selective disruption of lipid peroxide homeostasis in intratumoral regulatory T cells by targeting FSP1 enhances cancer immunity.",
-      "added_date": "2026-01-27T08:47:21.708710"
-    },
-    {
-      "doi": "10.1038/s41467-026-68580-4",
-      "title": "Identification of Chlamydia pneumoniae and NLRP3 inflammasome activation in Alzheimer's disease retina.",
-      "added_date": "2026-01-27T08:47:21.708722"
-    },
-    {
-      "doi": "10.1371/journal.pgen.1011743",
-      "title": "Oculopharyngeal muscular dystrophy (OPMD) associated alanine expansion impairs the function of the nuclear polyadenosine RNA binding protein PABPN1 as revealed by proximity labeling and comparative proteomics",
-      "added_date": "2026-01-27T10:19:28.105911"
-    },
-    {
-      "doi": "10.7554/eLife.107000",
-      "title": "Phenylhydrazone-based endoplasmic reticulum proteostasis regulator compounds with enhanced biological activity",
-      "added_date": "2026-01-27T10:44:18.039253"
-    },
-    {
-      "doi": "10.1371/journal.pbio.3003592",
-      "title": "Dynamic auxin maxima regulate male-to-hermaphrodite conversion and de novo meristem formation in the fern <i>Ceratopteris</i> gametophytes",
-      "added_date": "2026-01-27T10:44:18.039278"
-    },
-    {
-      "doi": "10.1038/s41467-026-69426-9",
-      "title": "PanMETAI - a high performance tabular foundation model for accurate pancreatic cancer diagnosis via NMR metabolomics.",
-      "added_date": "2026-02-18T03:34:15.469537"
-    },
-    {
-      "doi": "10.1038/s41467-026-69424-x",
-      "title": "Lack of MDA5 delays hematopoietic aging by modulating inflammaging and proteostasis in mice.",
-      "added_date": "2026-02-18T03:34:15.469599"
-    },
-    {
-      "doi": "10.1038/s41467-026-68909-z",
-      "title": "Human iPSC-based Modeling of Pulmonary Fibrosis Reveals p300/CBP Inhibition Suppresses Alveolar Transitional Cell State.",
-      "added_date": "2026-02-18T03:34:15.469641"
-    },
-    {
-      "doi": "10.1038/s41467-026-69069-w",
-      "title": "Colonic spatial single-cell proteomics and murine models link mitochondrial dysfunction to dimeric IgA-secreting plasma cell deficiency in Crohn's disease.",
-      "added_date": "2026-02-18T03:34:15.469681"
-    },
-    {
-      "doi": "10.1371/journal.pbio.3003601",
-      "title": "Integrated chromatin and transcriptomic profiling reveals sex-specific mechanisms of gene regulation in hepatic nutrient responses.",
-      "added_date": "2026-02-18T03:34:15.469732"
+      "doi": "10.7554/eLife.104978",
+      "title": "Single-cell atlas of AML reveals age-related gene regulatory networks in t(8;21) AML.",
+      "added_date": "2026-02-13T08:17:48.183499"
     }
   ],
-  "last_updated": "2026-02-18T03:34:15.469831"
+  "last_updated": "2026-02-13T08:17:48.183928"
 }
