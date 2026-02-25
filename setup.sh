@@ -41,10 +41,21 @@ else
 fi
 
 # ============================================================================
-# Step 2: Install dependencies
+# Step 2: Create venv and install dependencies
 # ============================================================================
 echo ""
-echo -e "${CYAN}━━━ 패키지 설치 ━━━${NC}"
+echo -e "${CYAN}━━━ Python 환경 설정 ━━━${NC}"
+
+VENV_DIR="${SCRIPT_DIR}/venv"
+if [ ! -d "${VENV_DIR}" ]; then
+    echo -e "  ${CYAN}→${NC} 가상환경 생성 중..."
+    python3 -m venv "${VENV_DIR}"
+    echo -e "  ${GREEN}✓${NC} 가상환경 생성: ${VENV_DIR}"
+else
+    echo -e "  ${GREEN}✓${NC} 가상환경 이미 존재"
+fi
+
+source "${VENV_DIR}/bin/activate"
 
 if [ -f "${SCRIPT_DIR}/requirements.txt" ]; then
     pip install -r "${SCRIPT_DIR}/requirements.txt" -q 2>/dev/null
@@ -158,6 +169,8 @@ case "${MODE}" in
     3)
         echo ""
         echo -e "  ${GREEN}수동 실행 명령어:${NC}"
+        echo "    cd ${SCRIPT_DIR}"
+        echo "    source venv/bin/activate"
         echo "    python3 -m src.main --config config/config.yaml"
         echo ""
         echo "  옵션:"
@@ -180,6 +193,7 @@ echo -e "${CYAN}║  ${BOLD}Setup 완료!${NC}${CYAN}                           
 echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  ${BOLD}수동 실행:${NC}"
+echo "    cd ${SCRIPT_DIR} && source venv/bin/activate"
 echo "    python3 -m src.main --config config/config.yaml"
 echo ""
 echo -e "  ${BOLD}결과물:${NC}"
