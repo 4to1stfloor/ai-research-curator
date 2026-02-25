@@ -75,8 +75,17 @@ class PaperDigestPipeline:
         # Content Fetcher (for web-based content retrieval)
         self.content_fetcher = PaperContentFetcher(papers_dir / "figures")
 
+        # Determine output base directory
+        if self.config.output.output_dir:
+            output_base = Path(self.config.output.output_dir).expanduser().resolve()
+        else:
+            output_base = None  # Use default (relative to project root)
+
         # Diagrams directory
-        self.diagrams_dir = resolve_path(self.config.output.reports_path, self.base_dir).parent / "diagrams"
+        if output_base:
+            self.diagrams_dir = output_base / "diagrams"
+        else:
+            self.diagrams_dir = resolve_path(self.config.output.reports_path, self.base_dir).parent / "diagrams"
         self.diagrams_dir.mkdir(parents=True, exist_ok=True)
 
         # AI Components (initialized lazily)
@@ -86,11 +95,17 @@ class PaperDigestPipeline:
         self._figure_explanation_gen = None
 
         # Output
-        reports_path = resolve_path(self.config.output.reports_path, self.base_dir)
+        if output_base:
+            reports_path = output_base / "reports"
+        else:
+            reports_path = resolve_path(self.config.output.reports_path, self.base_dir)
         self.pdf_generator = PDFReportGenerator(reports_path)
 
         if self.config.output.obsidian.enabled:
-            obsidian_path = resolve_path(self.config.output.obsidian.vault_path, self.base_dir)
+            if output_base:
+                obsidian_path = output_base / "obsidian"
+            else:
+                obsidian_path = resolve_path(self.config.output.obsidian.vault_path, self.base_dir)
             self.obsidian_exporter = ObsidianExporter(obsidian_path)
         else:
             self.obsidian_exporter = None

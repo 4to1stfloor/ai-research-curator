@@ -133,7 +133,36 @@ else
 fi
 
 # ============================================================================
-# Step 5: Execution mode
+# Step 5: Output directory
+# ============================================================================
+echo ""
+echo -e "${CYAN}━━━ 결과물 저장 경로 ━━━${NC}"
+echo ""
+echo "  리포트(HTML/PDF), Obsidian 노트가 저장될 폴더를 지정하세요."
+echo "  비워두면 기본 경로(${SCRIPT_DIR}/output/)를 사용합니다."
+echo ""
+read -p "  저장 경로 (Enter=기본): " OUTPUT_DIR
+
+CONFIG_FILE="${SCRIPT_DIR}/config/config.yaml"
+if [ -n "${OUTPUT_DIR}" ]; then
+    # Expand ~ to home directory
+    OUTPUT_DIR="${OUTPUT_DIR/#\~/$HOME}"
+    mkdir -p "${OUTPUT_DIR}" 2>/dev/null
+    # Update config.yaml with output_dir
+    if grep -q "# output_dir:" "${CONFIG_FILE}"; then
+        sed -i "s|# output_dir:.*|output_dir: ${OUTPUT_DIR}|" "${CONFIG_FILE}"
+    elif grep -q "output_dir:" "${CONFIG_FILE}"; then
+        sed -i "s|output_dir:.*|output_dir: ${OUTPUT_DIR}|" "${CONFIG_FILE}"
+    fi
+    echo -e "  ${GREEN}✓${NC} 결과물 저장 경로: ${OUTPUT_DIR}"
+    echo "    → HTML 리포트: ${OUTPUT_DIR}/reports/"
+    echo "    → Obsidian 노트: ${OUTPUT_DIR}/obsidian/"
+else
+    echo -e "  ${GREEN}✓${NC} 기본 경로 사용: ${SCRIPT_DIR}/output/"
+fi
+
+# ============================================================================
+# Step 6: Execution mode
 # ============================================================================
 echo ""
 echo -e "${CYAN}━━━ 실행 방식 선택 ━━━${NC}"

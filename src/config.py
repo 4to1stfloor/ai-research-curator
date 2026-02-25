@@ -82,6 +82,7 @@ class OutputConfig(BaseModel):
     pdf_report: bool = True
     obsidian: ObsidianConfig = Field(default_factory=ObsidianConfig)
     reports_path: str = "./output/reports"
+    output_dir: Optional[str] = None  # Custom base dir for all output
 
 
 class StorageConfig(BaseModel):

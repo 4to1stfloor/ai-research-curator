@@ -145,6 +145,10 @@ ai:
 
 # 출력 설정
 output:
+  # 결과물 저장 디렉토리 (설정하면 reports/, obsidian/ 등이 이 경로 아래에 생성)
+  # 미설정 시 프로젝트 폴더 내 ./output/ 사용
+  # output_dir: ~/my-research-reports
+
   # PDF 리포트 생성 여부
   pdf_report: true
 
