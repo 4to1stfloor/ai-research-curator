@@ -22,6 +22,14 @@ cd "${SCRIPT_DIR}"
 echo "[Update] git pull..." >> "${LOG_FILE}"
 git pull --ff-only >> "${LOG_FILE}" 2>&1 || echo "[Update] git pull failed, using current version" >> "${LOG_FILE}"
 
+# Setup venv if not exists, then activate
+VENV_DIR="${SCRIPT_DIR}/venv"
+if [ ! -d "${VENV_DIR}" ]; then
+    echo "[Setup] Creating venv..." >> "${LOG_FILE}"
+    python3 -m venv "${VENV_DIR}" >> "${LOG_FILE}" 2>&1
+fi
+source "${VENV_DIR}/bin/activate"
+
 # Update dependencies if requirements changed
 pip install -r requirements.txt -q >> "${LOG_FILE}" 2>&1
 
