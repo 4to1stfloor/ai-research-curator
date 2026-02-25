@@ -14,6 +14,12 @@
 - **HTML/PDF 리포트**: 보기 좋은 리포트 생성
 - **Obsidian 연동**: 노트앱에 자동 정리
 
+## 시스템 요구사항
+
+- **Linux** / **macOS** (bash, cron 필요)
+- Python 3.10+
+- **Windows**: 네이티브 지원 불가 (bash/cron 미지원). WSL(Windows Subsystem for Linux) 환경에서 사용 가능합니다.
+
 ## 빠른 시작
 
 ### 방법 1: 원라인 설치 (권장)
@@ -148,9 +154,12 @@ bash scripts/setup_cron.sh install
 # 상태 확인
 bash scripts/setup_cron.sh status
 
-# 제거
+# 해제 (자동 실행 중지)
 bash scripts/setup_cron.sh remove
 ```
+
+> **crontab 해제**: 자동 실행을 중지하려면 `bash scripts/setup_cron.sh remove`를 실행하세요.
+> curl로 설치한 경우: `cd ~/.ai-research-curator && bash scripts/setup_cron.sh remove`
 
 ### GitHub Actions (서버 없이 자동 실행)
 
@@ -306,6 +315,25 @@ A: `output/obsidian` 폴더를 Obsidian vault에 복사하거나, `config.yaml`�
 
 ### Q: GitHub Actions가 실패합니다
 A: Repository Secrets에 `PUBMED_EMAIL`이 설정되어 있는지 확인하세요. 이 값은 필수입니다.
+
+### Q: crontab 자동 실행을 해제하고 싶습니다
+A: 아래 명령어로 해제할 수 있습니다:
+```bash
+# git clone으로 설치한 경우
+bash scripts/setup_cron.sh remove
+
+# curl로 설치한 경우
+cd ~/.ai-research-curator && bash scripts/setup_cron.sh remove
+```
+
+### Q: Windows에서 사용할 수 있나요?
+A: Windows는 bash/cron을 네이티브로 지원하지 않아 직접 실행이 불가합니다. **WSL(Windows Subsystem for Linux)**을 설치하면 Linux 환경에서 동일하게 사용 가능합니다:
+```powershell
+# PowerShell에서 WSL 설치
+wsl --install
+# WSL 터미널에서 설치
+curl -fsSL https://raw.githubusercontent.com/4to1stfloor/ai-research-curator/main/install.sh | bash
+```
 
 ### Q: 이미 설치된 버전을 업데이트하고 싶습니다
 A: 같은 설치 명령어를 다시 실행하면 자동으로 업데이트됩니다:
