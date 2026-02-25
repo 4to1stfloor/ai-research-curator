@@ -201,24 +201,40 @@ GitHub Actions를 사용하면 **내 컴퓨터를 켜지 않아도** 매주 자�
 
 > **참고**: Nature, Science, Cell 등 대형 출판사는 봇 차단이 있어 PMC에 등록된 논문만 Figure 추출이 가능합니다.
 
-## 출력 예시
+## 결과물 확인
 
-### HTML/PDF 리포트
-- `output/reports/paper_digest_20260213.html`
-- `output/reports/paper_digest_20260213.pdf`
+curl로 설치한 경우 모든 결과물은 `~/.ai-research-curator/` 아래에 생성됩니다:
 
-### Obsidian 노트
 ```
-output/obsidian/
-├── papers/
-│   ├── VMAT2_dysfunction_impairs_vesicular.md
-│   └── Single_cell_atlas_of_AML.md
-├── digests/
-│   └── digest_20260213.md
-└── figures/
-    └── 10.1234_paper_id/
-        ├── fig_1.jpg
-        └── fig_2.jpg
+~/.ai-research-curator/
+├── output/
+│   ├── reports/                          ← HTML/PDF 리포트 (여기만 보면 됨!)
+│   │   ├── paper_digest_20260225.html
+│   │   └── paper_digest_20260225.pdf
+│   └── obsidian/                         ← Obsidian 마크다운 노트
+│       ├── papers/
+│       │   ├── Single_cell_epigenetic_profiling.md
+│       │   └── Intratumoral_Parvimonas_micra.md
+│       ├── digests/
+│       │   └── digest_20260225.md
+│       └── figures/
+│           └── 10.1234_paper_id/
+│               ├── fig_1.jpg
+│               └── fig_2.jpg
+├── logs/                                 ← 실행 로그
+│   └── cron_20260225.log
+├── config/
+│   └── config.yaml                       ← 키워드/저널/LLM 설정 변경
+└── data/
+    └── paper_history.json                ← 처리된 논문 이력 (중복 방지)
+```
+
+매주 수요일 자동 실행 후 **`~/.ai-research-curator/output/reports/`** 폴더에서 HTML 파일을 브라우저로 열면 됩니다:
+
+```bash
+# 최신 리포트 열기
+open ~/.ai-research-curator/output/reports/paper_digest_*.html  # macOS
+xdg-open ~/.ai-research-curator/output/reports/paper_digest_*.html  # Linux
 ```
 
 ## 프로젝트 구조
