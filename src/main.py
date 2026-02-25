@@ -112,14 +112,22 @@ class PaperDigestPipeline:
 
     @staticmethod
     def _check_claude_cli() -> bool:
-        """Check if Claude CLI is available."""
+        """Check if Claude CLI is available and subscription is active."""
         import subprocess
         try:
+            # First check if claude command exists
             r = subprocess.run(
                 ["claude", "--version"],
                 capture_output=True, text=True, timeout=10
             )
-            return r.returncode == 0
+            if r.returncode != 0:
+                return False
+            # Verify subscription/login by sending a minimal prompt
+            r = subprocess.run(
+                ["claude", "--print", "-p", "say ok"],
+                capture_output=True, text=True, timeout=30
+            )
+            return r.returncode == 0 and "ok" in r.stdout.lower()
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 

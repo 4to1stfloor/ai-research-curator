@@ -72,10 +72,17 @@ echo -e "${CYAN}━━━ AI 백엔드 감지 ━━━${NC}"
 
 AI_FOUND=false
 
-# Check Claude CLI
+# Check Claude CLI (설치 + 구독/로그인 상태 확인)
 if command -v claude &>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} Claude CLI 감지 → API 키 없이 Claude 사용 가능"
-    AI_FOUND=true
+    echo -e "  ${CYAN}→${NC} Claude CLI 감지됨, 구독 상태 확인 중..."
+    CLAUDE_TEST=$(claude --print -p "say ok" 2>&1) && CLAUDE_OK=$? || CLAUDE_OK=$?
+    if [ "${CLAUDE_OK}" -eq 0 ] && echo "${CLAUDE_TEST}" | grep -qi "ok"; then
+        echo -e "  ${GREEN}✓${NC} Claude CLI (구독 활성) → API 키 없이 Claude 사용 가능"
+        AI_FOUND=true
+    else
+        echo -e "  ${YELLOW}!${NC} Claude CLI 설치됨 (로그인/구독 필요)"
+        echo "    → 'claude' 명령어로 로그인 후 다시 실행하세요"
+    fi
 fi
 
 # Check API keys

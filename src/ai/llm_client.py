@@ -20,15 +20,20 @@ class ClaudeCLIClient(BaseLLMClient):
     """Claude Code CLI client. Uses Claude subscription, no API key needed."""
 
     def __init__(self):
-        """Initialize Claude CLI client. Verifies 'claude' command is available."""
-        if not self._check_available():
+        """Initialize Claude CLI client. Verifies 'claude' command and subscription."""
+        if not self._check_installed():
             raise RuntimeError(
                 "Claude CLI not found. Install Claude Code: "
                 "https://docs.anthropic.com/en/docs/claude-code"
             )
+        if not self._check_subscription():
+            raise RuntimeError(
+                "Claude CLI is installed but subscription/login is not active. "
+                "Run 'claude' to log in."
+            )
 
     @staticmethod
-    def _check_available() -> bool:
+    def _check_installed() -> bool:
         """Check if Claude CLI is installed."""
         try:
             r = subprocess.run(
@@ -36,6 +41,18 @@ class ClaudeCLIClient(BaseLLMClient):
                 capture_output=True, text=True, timeout=10
             )
             return r.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+
+    @staticmethod
+    def _check_subscription() -> bool:
+        """Check if Claude CLI subscription/login is active."""
+        try:
+            r = subprocess.run(
+                ["claude", "--print", "-p", "say ok"],
+                capture_output=True, text=True, timeout=30
+            )
+            return r.returncode == 0 and "ok" in r.stdout.lower()
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
