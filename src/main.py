@@ -705,15 +705,25 @@ flowchart TD
         console.print("=" * 50)
 
         max_papers = self.config.search.max_papers
+        base_days = self.config.search.days_lookback
 
-        # 1. Search
+        # 1. Search + Filter (expand search range if not enough open access papers)
         all_papers = self.search_papers()
         if not all_papers:
             console.print("[yellow]No papers found![/yellow]")
             return {"papers": 0}
 
-        # 2. Filter
         papers = self.filter_papers(all_papers)
+
+        # If open_access_only and not enough papers, expand search range
+        if self.config.search.open_access_only and len(papers) < max_papers:
+            for extra_days in [base_days * 2, base_days * 4]:
+                if len(papers) >= max_papers:
+                    break
+                console.print(f"[yellow]Open access papers ({len(papers)}/{max_papers}) 부족 → 검색 범위를 {extra_days}일로 확장[/yellow]")
+                all_papers = self.search_papers(days_lookback_override=extra_days)
+                papers = self.filter_papers(all_papers)
+
         if not papers:
             console.print("[yellow]No new papers after filtering![/yellow]")
             return {"papers": 0}
