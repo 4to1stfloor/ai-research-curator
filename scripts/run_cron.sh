@@ -10,17 +10,37 @@ LOG_FILE="${LOG_DIR}/cron_$(date +%Y%m%d).log"
 
 echo "=== AI Research Curator - $(date) ===" >> "${LOG_FILE}"
 
-# Load .env if exists
+# Load .env if exists (includes CLAUDE_BIN_DIR, API keys, etc.)
 if [ -f "${SCRIPT_DIR}/.env" ]; then
     set -a
     source "${SCRIPT_DIR}/.env"
     set +a
 fi
 
-# Pull latest code from GitHub
+# Add Claude CLI path to PATH (saved by setup.sh during installation)
+if [ -n "${CLAUDE_BIN_DIR}" ] && [ -d "${CLAUDE_BIN_DIR}" ]; then
+    export PATH="${CLAUDE_BIN_DIR}:${PATH}"
+    echo "[PATH] Claude CLI: ${CLAUDE_BIN_DIR}/claude" >> "${LOG_FILE}"
+else
+    echo "[PATH] CLAUDE_BIN_DIR not set, Claude CLI may not be available" >> "${LOG_FILE}"
+fi
+
+# Pull latest code from GitHub (stash local data changes first)
 cd "${SCRIPT_DIR}"
 echo "[Update] git pull..." >> "${LOG_FILE}"
+STASHED=false
+if ! git diff --quiet data/ 2>/dev/null; then
+    git stash push -m "cron-auto-stash" -- data/ >> "${LOG_FILE}" 2>&1 && STASHED=true
+    echo "[Update] Stashed local data changes" >> "${LOG_FILE}"
+fi
 git pull --ff-only >> "${LOG_FILE}" 2>&1 || echo "[Update] git pull failed, using current version" >> "${LOG_FILE}"
+if [ "${STASHED}" = true ]; then
+    git stash pop >> "${LOG_FILE}" 2>&1 || {
+        echo "[Update] Stash pop conflict, keeping remote version for data/" >> "${LOG_FILE}"
+        git checkout --theirs data/ >> "${LOG_FILE}" 2>&1
+        git stash drop >> "${LOG_FILE}" 2>&1
+    }
+fi
 
 # Setup venv if not exists, then activate
 VENV_DIR="${SCRIPT_DIR}/venv"

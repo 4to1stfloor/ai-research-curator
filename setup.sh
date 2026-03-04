@@ -71,6 +71,7 @@ echo ""
 echo -e "${CYAN}━━━ AI 백엔드 감지 ━━━${NC}"
 
 AI_FOUND=false
+ENV_FILE="${SCRIPT_DIR}/.env"
 
 # Check Claude CLI (설치 + 구독/로그인 상태 확인)
 if command -v claude &>/dev/null; then
@@ -79,6 +80,13 @@ if command -v claude &>/dev/null; then
     if [ "${CLAUDE_OK}" -eq 0 ] && echo "${CLAUDE_TEST}" | grep -qi "ok"; then
         echo -e "  ${GREEN}✓${NC} Claude CLI (구독 활성) → API 키 없이 Claude 사용 가능"
         AI_FOUND=true
+        # Save Claude CLI path to .env for cron (cron has minimal PATH)
+        CLAUDE_BIN_DIR=$(dirname "$(command -v claude)")
+        if ! grep -q "CLAUDE_BIN_DIR" "${ENV_FILE}" 2>/dev/null; then
+            echo "CLAUDE_BIN_DIR=${CLAUDE_BIN_DIR}" >> "${ENV_FILE}"
+        else
+            sed -i "s|CLAUDE_BIN_DIR=.*|CLAUDE_BIN_DIR=${CLAUDE_BIN_DIR}|" "${ENV_FILE}"
+        fi
     else
         echo -e "  ${YELLOW}!${NC} Claude CLI 설치됨 (로그인/구독 필요)"
         echo "    → 'claude' 명령어로 로그인 후 다시 실행하세요"
@@ -123,8 +131,6 @@ fi
 # ============================================================================
 echo ""
 echo -e "${CYAN}━━━ PubMed 이메일 설정 ━━━${NC}"
-
-ENV_FILE="${SCRIPT_DIR}/.env"
 
 if [ -f "${ENV_FILE}" ] && grep -q "PUBMED_EMAIL" "${ENV_FILE}"; then
     CURRENT_EMAIL=$(grep "PUBMED_EMAIL" "${ENV_FILE}" | cut -d'=' -f2)
