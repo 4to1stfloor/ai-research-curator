@@ -109,22 +109,15 @@ def remove_llm_preamble(text: str) -> str:
     for pattern in preamble_patterns:
         result = re.sub(pattern, '', result, flags=re.MULTILINE)
 
-    # Remove first heading if it's not an expected section name
-    # (catches LLM outputting paper title as first heading)
-    result = result.strip()
-    expected_sections = [
-        '핵심 발견', 'Key Findings', '연구 방법', 'Methods',
-        '연구 배경', 'Background', '의의', 'Significance',
-        '한 줄 요약', 'One-line Summary',
-    ]
-    first_line_match = re.match(r'^(#{1,4})\s+([^\n]+)\n?', result)
-    if first_line_match:
-        heading_text = first_line_match.group(2).strip()
-        if not any(section in heading_text for section in expected_sections):
-            result = result[first_line_match.end():]
+    # Remove ALL markdown headings (new prose format should have none)
+    result = re.sub(r'^#{1,4}\s+[^\n]*\n?', '', result.strip(), flags=re.MULTILINE)
 
     # Also remove "---" separator lines that appear after preamble removal
     result = re.sub(r'^\s*-{3,}\s*\n?', '', result, flags=re.MULTILINE)
+
+    # Remove bullet points and numbered lists (convert to plain text)
+    result = re.sub(r'^[-*]\s+', '', result, flags=re.MULTILINE)
+    result = re.sub(r'^\d+\.\s+', '', result, flags=re.MULTILINE)
 
     return result.strip()
 
@@ -172,6 +165,63 @@ def remove_meta_commentary(text: str) -> str:
     result = re.sub(r'\n{3,}', '\n\n', result)
 
     return result.strip()
+
+
+def ensure_paragraph_breaks(text: str) -> str:
+    """Ensure prose summary has proper paragraph breaks (4 paragraphs).
+
+    If the LLM outputs text without blank line separators between paragraphs,
+    insert breaks after the first sentence (one-line overview) and detect
+    paragraph transitions.
+    """
+    import re
+
+    # Already has paragraph breaks (3+ blank lines = 4+ paragraphs)
+    paragraphs = re.split(r'\n\s*\n', text.strip())
+    if len(paragraphs) >= 3:
+        return text  # Already properly formatted
+
+    # Try to split: first sentence ending with "연구입니다." is paragraph 1
+    # Then look for natural paragraph transitions
+    lines = text.strip().split('\n')
+    result_paragraphs = []
+    current = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            if current:
+                result_paragraphs.append(' '.join(current))
+                current = []
+            continue
+
+        # If current paragraph is empty and we're starting fresh
+        if not current:
+            current.append(line)
+            # Check if this line alone is the one-line overview
+            if re.search(r'연구입니다[.。]?\s*$', line):
+                result_paragraphs.append(' '.join(current))
+                current = []
+            continue
+
+        # Check if this line starts a new paragraph topic
+        # (after the overview, detect transitions to background/findings/significance)
+        if len(result_paragraphs) >= 1 and re.search(
+            r'(연구입니다|습니다|었습니다|입니다)[.。]?\s*$', ' '.join(current)
+        ) and len(' '.join(current)) > 100:
+            result_paragraphs.append(' '.join(current))
+            current = [line]
+        else:
+            current.append(line)
+
+    if current:
+        result_paragraphs.append(' '.join(current))
+
+    # If we got reasonable paragraphs (2+), join with blank lines
+    if len(result_paragraphs) >= 2:
+        return '\n\n'.join(result_paragraphs)
+
+    return text
 
 
 def remove_non_korean_foreign_chars(text: str) -> str:
@@ -222,36 +272,43 @@ def remove_non_korean_foreign_chars(text: str) -> str:
     return cleaned
 
 
-SUMMARIZE_SYSTEM_PROMPT = """당신은 생명과학/의학 분야 논문 요약 전문가입니다. 전문 용어는 반드시 영어로 유지하세요."""
+SUMMARIZE_SYSTEM_PROMPT = """당신은 생명과학/의학 분야 논문 요약 전문가입니다.
+전문 용어(유전자명, 단백질명, 기술명, 방법론 등)는 반드시 영어로 유지하세요.
+출력은 순수 한국어 산문체로 작성하되, 마크다운 헤딩(#, ##), 불릿 포인트(-, *), 번호 목록(1., 2.)은 절대 사용하지 마세요.
+반드시 4개의 문단으로만 구성하세요."""
 
 # Full prompt when body text is available
 SUMMARIZE_PROMPT_FULL = """다음 논문을 한국어로 요약해주세요.
 
-## 예시 요약 (이 스타일을 정확히 따라주세요):
+## 출력 형식 (반드시 이 4문단 구조를 따르세요):
 
-**예시 논문**: "Spatially resolved transcriptomics reveals cell type heterogeneity"
+문단1 - 한 줄 개요: 이 논문이 무엇을 한 연구인지 1문장으로 요약.
+문단2 - 연구 배경: 질환/분야의 맥락, 기존에 알려진 사실, 해결되지 않은 문제, 이 연구의 동기.
+문단3 - 핵심 발견: 연구진이 수행한 분석과 구체적 결과. 어떤 방법을 썼고, 무엇을 발견했는지.
+문단4 - 의의: 이 연구가 해당 분야에 미치는 영향, 임상적/학문적 함의, 향후 전망.
 
-### 핵심 발견 (Key Findings)
-1. **Spatially resolved transcriptomics를 이용한 cell type mapping**: Tissue section에서 다양한 cell type의 spatial distribution을 확인하였다.
-2. **stACN model 개발**: Graph noise model과 joint tensor decomposition을 활용한 새로운 network model을 개발하였다.
-3. **성능 향상**: Adjusted Rand Index (ARI) 기준으로 기존 방법 대비 clustering 성능이 향상되었다.
+각 문단 사이에 반드시 빈 줄을 넣으세요 (총 4개 문단, 3개 빈 줄).
+마크다운 헤딩(#), 불릿(-), 번호(1.)는 절대 사용하지 마세요.
 
-### 연구 방법 (Methods)
-- Spatially resolved transcriptomics (SRT) 데이터 분석
-- Graph noise model 기반 denoising
-- Joint tensor decomposition
-- 평가 지표: Adjusted Rand Index (ARI)
+## 예시 1:
 
-### 연구 배경 및 동기 (Background)
-- SRT 데이터는 gene expression과 spatial information을 동시에 제공하지만 technical noise가 많다.
-- 기존 방법은 denoising과 spatial domain identification을 별도로 수행하여 성능이 저하된다.
+Proteogenomics 분석을 통해 진행성 differentiated thyroid cancer의 분자 아형과 치료 반응 차이를 보여준 연구입니다.
 
-### 의의 및 한계 (Significance & Limitations)
-- 의의: Denoising과 spatial domain identification을 통합한 최초의 방법론
-- 한계: 특정 SRT platform에서만 검증됨
+Differentiated thyroid cancer(DTC)은 일반적으로 예후가 좋은 암으로 알려져 있지만, 일부 환자에서는 locally advanced 또는 metastatic 단계로 진행하면서 치료 반응이 크게 달라지는 임상적 이질성이 나타납니다. 기존 연구에서는 BRAF, RAS, TERT promoter mutation과 같은 유전자 이상이 질병의 진행과 관련이 있다는 점이 알려져 있었지만, 실제 치료 전략과 직접적으로 연결되는 통합적 분류 체계는 부족했습니다. 이에 연구진은 진행성 DTC의 분자적 특성을 보다 정밀하게 이해하기 위해 proteogenomics 접근을 적용하여 질병의 생물학적 아형을 규명하고자 하였습니다.
 
-### 한 줄 요약
-Spatially resolved transcriptomics data의 denoising과 spatial domain identification을 동시에 수행하는 stACN model을 제안하였다.
+연구진은 진행성 DTC 환자 샘플을 대상으로 proteomic profiling과 genomic 분석을 통합하여 세 가지 주요 분자 아형을 규명했습니다. 첫 번째는 thyroid differentiation 기능이 비교적 잘 유지된 canonical subtype(CC1), 두 번째는 tumor stroma와 angiogenesis 관련 신호가 강한 stromal subtype(CC2), 세 번째는 immune cell infiltration과 immune signaling이 두드러지는 immunogenic subtype(CC3)입니다. 이 세 아형은 mutation 패턴, tumor microenvironment, radioactive iodine(RAI) 치료 반응 및 progression-free survival(PFS)에서 서로 뚜렷한 차이를 보였습니다. 특히 CC1은 RAI 치료 반응이 가장 좋았으며, CC2는 anti-angiogenic therapy에 반응할 가능성이 높았고, CC3는 immunotherapy 전략과 연관될 가능성이 제시되었습니다.
+
+이 연구는 진행성 DTC가 단일한 질환이 아니라 서로 다른 생물학적 특성을 가진 세 가지 분자 아형으로 구성된 질환 스펙트럼임을 보여주었습니다. 또한 이러한 분류가 단순한 분자적 차이를 넘어 실제 치료 반응과 예후 차이로 이어질 수 있음을 제시하였습니다. 향후 진행성 DTC 치료는 기존의 획일적인 접근이 아니라 subtype 기반 precision medicine 전략으로 발전할 가능성이 있으며, proteogenomics 기반 분석이 임상 의사결정에 중요한 역할을 할 수 있음을 시사합니다.
+
+## 예시 2:
+
+장내미생물 대사 분석을 통해 MASH fibrosis 기전을 보여준 연구입니다.
+
+Metabolic dysfunction-associated steatotic liver disease(MASLD)은 일부 환자에서 염증과 fibrosis를 동반한 metabolic dysfunction-associated steatohepatitis(MASH)으로 진행하며, 이 단계에서 cirrhosis와 hepatocellular carcinoma 위험이 크게 증가합니다. 그동안 과도한 당, 특히 fructose 섭취가 질환 악화와 연관된다는 역학적 근거는 존재하였으나, 실제로 어떤 생물학적 경로를 통해 hepatic fibrosis로 이어지는지는 명확하지 않았습니다. 본 연구는 gut-liver axis에 주목하여, 장내미생물이 생성하는 metabolite가 질환 진행의 핵심 매개체일 가능성을 검증하고자 하였습니다.
+
+대규모 UK Biobank 분석에서 총 당 및 fructose 섭취량이 높을수록 liver disease 발생 및 간 관련 사망 위험이 증가하는 경향이 확인되었습니다. 이어진 metagenomics 분석에서는 MASH 단계 환자에서 장내미생물의 fermentation pathway가 acetaldehyde 생성 방향으로 재편되는 현상이 관찰되었습니다. 임상 분변을 이용한 in vitro 실험에서도 MASH 환자 분변이 fructose를 더 많은 acetaldehyde로 전환함이 입증되었으며, 해당 물질은 hepatic stellate cell을 자극하여 MMP7 expression을 증가시키고 fibrosis를 촉진하는 기전이 제시되었습니다. 나아가 acetaldehyde 제거 능력을 강화한 engineered probiotics를 투여하였을 때, 동물 모델에서 hepatic fibrosis와 inflammation 지표가 유의하게 감소하는 결과를 보였습니다.
+
+본 연구는 과도한 당 섭취가 단순히 lipid accumulation을 넘어서, 장내미생물 유래 acetaldehyde를 매개로 hepatic fibrosis를 직접 촉진한다는 기전적 연결고리를 제시하였습니다. 특히 acetaldehyde-MMP7-hepatic stellate cell axis를 중심으로 한 분자적 경로를 규명하고, 이를 microbiome 기반 치료 전략으로 역전시킬 수 있음을 전임상 수준에서 입증하였다는 점에서 학문적·임상적 의의가 큽니다. 이는 MASH 치료에서 dietary intervention과 gut microbiome modulation을 결합한 precision medicine 전략의 가능성을 제시하는 중요한 근거가 될 수 있습니다.
 
 ---
 
@@ -270,44 +327,42 @@ Spatially resolved transcriptomics data의 denoising과 spatial domain identific
 ---
 
 **절대 규칙 (MUST FOLLOW):**
-1. 모든 전문 용어는 영어 그대로 쓰세요:
-   - "spatially resolved transcriptomics" (O) / "스페이셜리 리졸브드" (X)
+1. 반드시 4개 문단(한 줄 개요 / 연구 배경 / 핵심 발견 / 의의)으로만 작성하세요.
+2. 마크다운 헤딩(#, ##, ###), 불릿 포인트(-, *), 번호 목록(1., 2.)은 절대 사용하지 마세요. 순수 산문체만 사용하세요.
+3. 모든 전문 용어는 영어 그대로 쓰세요:
+   - "proteogenomics" (O) / "프로테오지노믹스" (X)
    - "spatial transcriptomics" (O) / "공간 전사체" (X)
-   - "denoising" (O) / "노이즈 제거" (X)
    - "single-cell RNA-seq" (O) / "단일세포" (X)
-2. 초록과 본문에 있는 내용만 쓰세요. 없는 내용을 지어내지 마세요.
-3. 제공된 텍스트의 품질, 완전성, 잘림 여부에 대해 절대 언급하지 마세요:
-   - "제공된 초록과 본문이 불완전하여" (X)
-   - "문장이 중간에 끊김" (X)
-   - "본문에서 잘림" (X)
-   - "전체 내용을 파악하기 어렵습니다" (X)
-   - "제공된 정보만을 바탕으로" (X)
-   - "제공된 정보가 불완전하여" (X)
-   금지! 있는 내용만으로 자연스럽게 요약하세요.
+   - "fibrosis" (O) / "섬유화" (X)
+   - "hepatic stellate cell" (O) / "간 성상세포" (X)
+4. 초록과 본문에 있는 내용만 쓰세요. 없는 내용을 지어내지 마세요.
+5. 제공된 텍스트의 품질, 완전성, 잘림 여부에 대해 절대 언급하지 마세요.
 
-위 예시처럼 전문 용어를 영어로 유지하면서 요약해주세요.
+위 예시처럼 서술형 산문체로 요약해주세요.
 """
 
 # Simplified prompt when only abstract is available (NO PDF)
 SUMMARIZE_PROMPT_ABSTRACT_ONLY = """다음 논문을 초록만 기반으로 한국어로 요약해주세요.
 
-## 예시 요약 (이 스타일을 정확히 따라주세요):
+## 출력 형식 (반드시 이 4문단 구조를 따르세요):
 
-**예시 논문**: "Spatially resolved transcriptomics reveals cell type distributions"
+문단1 - 한 줄 개요: 이 논문이 무엇을 한 연구인지 1문장으로 요약.
+문단2 - 연구 배경: 질환/분야의 맥락, 기존에 알려진 사실, 해결되지 않은 문제, 이 연구의 동기.
+문단3 - 핵심 발견: 연구진이 수행한 분석과 구체적 결과. 어떤 방법을 썼고, 무엇을 발견했는지.
+문단4 - 의의: 이 연구가 해당 분야에 미치는 영향, 임상적/학문적 함의, 향후 전망.
 
-### 핵심 발견 (Key Findings)
-1. **Spatially resolved transcriptomics를 이용한 cell type mapping**: Tissue section에서 다양한 cell type의 spatial distribution을 확인하였다.
-2. **Denoising 방법론 개발**: stACN이라는 새로운 network model을 통해 data quality를 향상시켰다 (ARI score 개선).
-3. **Spatial domain identification**: Graph noise model과 joint tensor decomposition을 활용하여 spatial domain을 식별하였다.
+각 문단 사이에 반드시 빈 줄을 넣으세요 (총 4개 문단, 3개 빈 줄).
+마크다운 헤딩(#), 불릿(-), 번호(1.)는 절대 사용하지 마세요.
 
-### 연구 방법 (Methods)
-- Spatially resolved transcriptomics (SRT) 데이터 분석
-- Graph noise model 기반 denoising
-- Joint tensor decomposition
-- Adjusted Rand Index (ARI)로 성능 평가
+## 예시:
 
-### 한 줄 요약
-Spatially resolved transcriptomics data의 denoising과 spatial domain identification을 동시에 수행하는 stACN model을 제안하였다.
+장내미생물 대사 분석을 통해 MASH fibrosis 기전을 보여준 연구입니다.
+
+MASLD은 일부 환자에서 염증과 fibrosis를 동반한 MASH으로 진행하며, 이 단계에서 cirrhosis와 hepatocellular carcinoma 위험이 크게 증가합니다. 그동안 과도한 fructose 섭취가 질환 악화와 연관된다는 역학적 근거는 존재하였으나, 실제로 어떤 생물학적 경로를 통해 hepatic fibrosis로 이어지는지는 명확하지 않았습니다. 본 연구는 gut-liver axis에 주목하여, 장내미생물이 생성하는 metabolite가 질환 진행의 핵심 매개체일 가능성을 검증하고자 하였습니다.
+
+대규모 UK Biobank 분석에서 총 당 및 fructose 섭취량이 높을수록 liver disease 발생 위험이 증가하는 경향이 확인되었습니다. Metagenomics 분석에서는 MASH 환자에서 장내미생물의 fermentation pathway가 acetaldehyde 생성 방향으로 재편되는 현상이 관찰되었으며, 해당 물질은 hepatic stellate cell을 자극하여 MMP7 expression을 증가시키고 fibrosis를 촉진하는 기전이 제시되었습니다. Engineered probiotics 투여 시 동물 모델에서 hepatic fibrosis가 유의하게 감소하였습니다.
+
+본 연구는 장내미생물 유래 acetaldehyde를 매개로 hepatic fibrosis가 촉진된다는 기전적 연결고리를 제시하였으며, microbiome 기반 치료 전략의 가능성을 전임상 수준에서 입증하였다는 점에서 학문적·임상적 의의가 큽니다.
 
 ---
 
@@ -323,19 +378,16 @@ Spatially resolved transcriptomics data의 denoising과 spatial domain identific
 ---
 
 **절대 규칙 (MUST FOLLOW):**
-1. 모든 전문 용어는 영어 그대로 쓰세요:
-   - "spatially resolved transcriptomics" (O) / "스페이셜리 리졸브드" (X)
+1. 반드시 4개 문단(한 줄 개요 / 연구 배경 / 핵심 발견 / 의의)으로만 작성하세요.
+2. 마크다운 헤딩(#, ##, ###), 불릿 포인트(-, *), 번호 목록(1., 2.)은 절대 사용하지 마세요. 순수 산문체만 사용하세요.
+3. 모든 전문 용어는 영어 그대로 쓰세요:
+   - "proteogenomics" (O) / "프로테오지노믹스" (X)
    - "spatial transcriptomics" (O) / "공간 전사체" (X)
-   - "denoising" (O) / "노이즈 제거" (X)
    - "single-cell RNA-seq" (O) / "단일세포" (X)
-2. 초록에 있는 내용만 쓰세요. 없는 내용을 지어내지 마세요.
-3. 제공된 텍스트의 품질, 완전성, 잘림 여부에 대해 절대 언급하지 마세요:
-   - "제공된 초록이 불완전하여" (X)
-   - "정보가 제한적이어서" (X)
-   - "제공된 정보만을 바탕으로" (X)
-   금지! 있는 내용만으로 자연스럽게 요약하세요.
+4. 초록에 있는 내용만 쓰세요. 없는 내용을 지어내지 마세요.
+5. 제공된 텍스트의 품질, 완전성, 잘림 여부에 대해 절대 언급하지 마세요.
 
-위 예시처럼 전문 용어를 영어로 유지하면서 요약해주세요.
+위 예시처럼 서술형 산문체로 요약해주세요.
 """
 
 
@@ -405,6 +457,9 @@ class PaperSummarizer:
 
         # Remove AI meta-commentary about input quality/completeness
         summary = remove_meta_commentary(summary)
+
+        # Ensure prose paragraphs are separated by blank lines
+        summary = ensure_paragraph_breaks(summary)
 
         return summary
 

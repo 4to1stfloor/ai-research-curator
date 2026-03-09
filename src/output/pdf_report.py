@@ -281,6 +281,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             margin: 0.5rem 0;
         }}
 
+        /* Prose-style summary */
+        .summary-prose p {{
+            margin: 0.75rem 0;
+            line-height: 1.8;
+            text-align: justify;
+            color: var(--text-primary);
+        }}
+
+        .summary-prose p:first-child {{
+            font-size: 1.05rem;
+            font-weight: 500;
+            color: var(--primary-dark);
+            border-left: 3px solid var(--primary);
+            padding-left: 0.75rem;
+            margin-bottom: 1rem;
+        }}
+
         /* Translation */
         .translation-pair {{
             margin-bottom: 1.25rem;
@@ -521,9 +538,9 @@ PAPER_SECTION_TEMPLATE = """
                     <path d="M5 4a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1H5zm-.5 2.5A.5.5 0 0 1 5 6h6a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5zM5 8a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1H5zm0 2a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1H5z"/>
                     <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm10-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1z"/>
                 </svg>
-                Summary
+                연구 개요
             </h3>
-            <div class="section-content">
+            <div class="section-content summary-prose">
                 {summary}
             </div>
         </section>
@@ -534,7 +551,7 @@ PAPER_SECTION_TEMPLATE = """
                     <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2z"/>
                     <path d="M2 4.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5z"/>
                 </svg>
-                Abstract Translation
+                Abstract (한국어 번역)
             </h3>
             <div class="section-content">
                 {translation}
@@ -565,79 +582,28 @@ class PDFReportGenerator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def _format_summary(self, summary: str) -> str:
-        """Format summary for HTML with proper markdown conversion."""
+        """Format summary for HTML. Converts prose paragraphs to <p> tags."""
         import re
 
-        # Convert markdown-like formatting to HTML
-        lines = summary.split('\n')
-        html_lines = []
-        in_list = False
-        list_type = None
+        # Split into paragraphs by blank lines
+        paragraphs = re.split(r'\n\s*\n', summary.strip())
 
-        for line in lines:
-            line = line.strip()
+        html_parts = []
+        for para in paragraphs:
+            # Clean up: join lines within a paragraph, strip whitespace
+            para = ' '.join(line.strip() for line in para.strip().split('\n') if line.strip())
+            if not para:
+                continue
+
+            # Remove any markdown headings that LLM might still produce
+            para = re.sub(r'^#{1,4}\s+', '', para)
 
             # Convert inline **bold** to <strong>
-            line = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', line)
+            para = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', para)
 
-            # Convert inline *italic* to <em>
-            line = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', line)
+            html_parts.append(f'<p>{para}</p>')
 
-            if not line:
-                if in_list:
-                    html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
-                    in_list = False
-                    list_type = None
-                continue
-            elif line.startswith('#### '):
-                # Convert #### to h5 for figure titles
-                if in_list:
-                    html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
-                    in_list = False
-                html_lines.append(f'<h5>{line[5:]}</h5>')
-            elif line.startswith('### '):
-                if in_list:
-                    html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
-                    in_list = False
-                html_lines.append(f'<h4>{line[4:]}</h4>')
-            elif line.startswith('## '):
-                if in_list:
-                    html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
-                    in_list = False
-                html_lines.append(f'<h3>{line[3:]}</h3>')
-            elif line.startswith('# '):
-                if in_list:
-                    html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
-                    in_list = False
-                html_lines.append(f'<h3>{line[2:]}</h3>')
-            elif line.startswith('- '):
-                if not in_list or list_type != 'ul':
-                    if in_list:
-                        html_lines.append('</ol>')
-                    html_lines.append('<ul>')
-                    in_list = True
-                    list_type = 'ul'
-                html_lines.append(f'<li>{line[2:]}</li>')
-            elif re.match(r'^\d+\.', line):
-                if not in_list or list_type != 'ol':
-                    if in_list:
-                        html_lines.append('</ul>')
-                    html_lines.append('<ol>')
-                    in_list = True
-                    list_type = 'ol'
-                content = re.sub(r'^\d+\.\s*', '', line)
-                html_lines.append(f'<li>{content}</li>')
-            else:
-                if in_list:
-                    html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
-                    in_list = False
-                    list_type = None
-                html_lines.append(f'<p>{line}</p>')
-
-        if in_list:
-            html_lines.append('</ul>' if list_type == 'ul' else '</ol>')
-
-        return '\n'.join(html_lines)
+        return '\n'.join(html_parts)
 
     def _format_translation(self, translations: list[dict]) -> str:
         """Format translation pairs for HTML."""
