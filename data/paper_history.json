@@ -51,10 +51,35 @@
       "added_date": "2026-02-25T03:34:16.045005"
     },
     {
-      "doi": "10.1371/journal.pbio.3003601",
-      "title": "Integrated chromatin and transcriptomic profiling reveals sex-specific mechanisms of gene regulation in hepatic nutrient responses",
-      "added_date": "2026-03-04T02:24:34.562348"
+      "doi": "10.1038/s41467-026-69622-7",
+      "title": "First-line modified FOLFOX plus/minus nivolumab and Ipilimumab or FLOT plus nivolumab in advanced gastroesophageal adenocarcinoma: a phase II multi-cohort trial.",
+      "added_date": "2026-03-04T09:29:30.632980"
+    },
+    {
+      "doi": "10.1038/s41467-026-69507-9",
+      "title": "Excess FGFR3 signaling in achondroplasia disrupts turnover of resting zone chondrocytes via CREB signaling.",
+      "added_date": "2026-03-04T09:29:30.633191"
+    },
+    {
+      "doi": "10.1126/sciadv.aeb3338",
+      "title": "Ampk alpha2 T172 activation dictates exercise performance and energy transduction in skeletal muscle.",
+      "added_date": "2026-03-04T09:29:30.633304"
+    },
+    {
+      "doi": "doi:10.1038/s41467-026-70084-0",
+      "title": "Subcellular proteomics reveals a blueprint for endosymbiont integration in trypanosomatid <i>Angomonas deanei</i>",
+      "added_date": "2026-03-04T09:29:30.633416"
+    },
+    {
+      "doi": "10.7554/eLife.108802",
+      "title": "Acetylation of H3K115 is associated with fragile nucleosomes at CpG island promoters and active regulatory sites",
+      "added_date": "2026-03-10T07:45:20.710345"
+    },
+    {
+      "doi": "10.7554/eLife.100623",
+      "title": "Deep learning linking mechanistic models to single-cell transcriptomics data reveals transcriptional bursting in response to DNA damage",
+      "added_date": "2026-03-10T07:54:24.848920"
     }
   ],
-  "last_updated": "2026-03-04T02:24:34.562439"
+  "last_updated": "2026-03-10T07:54:24.849221"
 }
