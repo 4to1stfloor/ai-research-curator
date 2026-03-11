@@ -379,8 +379,41 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             border-left: 4px solid var(--accent);
         }}
 
-        .figure-explanation h4 {{
-            color: var(--accent);
+        .figure-block {{
+            margin-bottom: 1.25rem;
+            padding-bottom: 1.25rem;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+        }}
+
+        .figure-block:last-child {{
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }}
+
+        .figure-block-title {{
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--primary-dark);
+            margin-bottom: 0.5rem;
+        }}
+
+        .figure-block-detail {{
+            color: var(--text-secondary);
+            margin-left: 1rem;
+            margin-top: 0.25rem;
+            line-height: 1.7;
+        }}
+
+        .figure-detail-list {{
+            margin: 0.25rem 0 0 1rem;
+            padding-left: 1rem;
+            color: var(--text-secondary);
+        }}
+
+        .figure-detail-list li {{
+            margin: 0.3rem 0;
+            line-height: 1.6;
         }}
 
         /* Mermaid Diagram */
@@ -684,24 +717,96 @@ class PDFReportGenerator:
         return ""
 
     def _format_figure_explanation(self, explanation: Optional[str]) -> str:
-        """Format figure explanation for HTML."""
+        """Format figure explanation for HTML with structured Figure blocks."""
+        import re
+
         if not explanation:
             return ""
 
-        html_parts = ['''
+        # Remove separator lines and meta-commentary
+        explanation = re.sub(r'\n-{3,}\n', '\n', explanation)
+        explanation = re.sub(r'(?:\n|^)\*{0,2}참고\*{0,2}\s*[:：].*', '', explanation, flags=re.DOTALL)
+        explanation = re.sub(r'(?:\n|^)실제 논문의.*', '', explanation, flags=re.DOTALL)
+
+        # Split by Figure headings (#### Figure N: or Figure N: or Figure 1—figure supplement 1:)
+        parts = re.split(r'(?:^|\n)(?:#{1,4}\s*)?(Figure\s*\d+(?:[A-Za-z]|[\u2014—-]figure\s+supplement\s+\d+\w?)?)\s*[:：]\s*', explanation)
+
+        html_blocks = []
+        # parts[0] is text before first Figure (usually empty), then alternating: fig_label, content
+        i = 1
+        while i < len(parts) - 1:
+            fig_label = parts[i].strip()  # e.g. "Figure 1"
+            content = parts[i + 1].strip()
+
+            # Parse content into 핵심 내용 and 세부 설명
+            key_match = re.search(r'\*{0,2}핵심\s*내용\*{0,2}\s*[:：]\s*', content)
+            detail_match = re.search(r'\*{0,2}세부\s*설명\*{0,2}\s*[:：]\s*', content)
+
+            fig_title = ""
+            key_content = ""
+            detail_content = ""
+
+            if key_match:
+                fig_title = content[:key_match.start()].strip()
+                if detail_match:
+                    key_content = content[key_match.end():detail_match.start()].strip()
+                    detail_content = content[detail_match.end():].strip()
+                else:
+                    key_content = content[key_match.end():].strip()
+            else:
+                # No structured format, use all content as description
+                fig_title = content.split('\n')[0] if '\n' in content else ""
+                detail_content = content if not fig_title else content[len(fig_title):].strip()
+
+            # Build HTML block
+            title_text = f"{fig_label}"
+            if fig_title:
+                title_text += f": {fig_title}"
+
+            block = f'<div class="figure-block">\n'
+            block += f'  <div class="figure-block-title">{title_text}</div>\n'
+
+            if key_content:
+                block += f'  <div class="figure-block-detail"><strong>핵심 내용</strong>: {key_content}</div>\n'
+
+            if detail_content:
+                # Parse bullet points (- Panel A: ...)
+                bullets = re.split(r'\n?\s*-\s+', detail_content)
+                bullets = [b.strip() for b in bullets if b.strip()]
+                if bullets:
+                    block += '  <div class="figure-block-detail"><strong>세부 설명</strong>:</div>\n'
+                    block += '  <ul class="figure-detail-list">\n'
+                    for bullet in bullets:
+                        # Bold Panel labels
+                        bullet = re.sub(r'^(Panel\s+[A-Z])', r'<strong>\1</strong>', bullet)
+                        block += f'    <li>{bullet}</li>\n'
+                    block += '  </ul>\n'
+                elif not key_content:
+                    block += f'  <div class="figure-block-detail">{detail_content}</div>\n'
+
+            block += '</div>'
+            html_blocks.append(block)
+            i += 2
+
+        if not html_blocks:
+            # Fallback: no Figure headings detected, use simple format
+            html_blocks.append(self._format_summary(explanation))
+
+        content_html = '\n'.join(html_blocks)
+
+        return f'''
         <section class="section">
             <h3 class="section-title">
                 <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                     <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
                     <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
                 </svg>
-                Figure Analysis
+                Figure 해설
             </h3>
             <div class="figure-explanation">
-        ''']
-        html_parts.append(self._format_summary(explanation))
-        html_parts.append('</div></section>')
-        return '\n'.join(html_parts)
+                {content_html}
+            </div>
+        </section>'''
 
     def _format_diagram(self, diagram_content: Optional[str]) -> str:
         """Format Mermaid diagram for HTML."""
