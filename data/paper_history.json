@@ -79,7 +79,32 @@
       "doi": "10.7554/eLife.100623",
       "title": "Deep learning linking mechanistic models to single-cell transcriptomics data reveals transcriptional bursting in response to DNA damage",
       "added_date": "2026-03-10T07:54:24.848920"
+    },
+    {
+      "doi": "10.1186/s12859-025-06365-0",
+      "title": "DNA sequence contamination analyzer (DNASCAN): a supervised analysis toolkit for detecting and removing DNA contaminants.",
+      "added_date": "2026-03-11T03:44:30.324110"
+    },
+    {
+      "doi": "10.1038/s41467-026-70084-0",
+      "title": "Subcellular proteomics reveals a blueprint for endosymbiont integration in trypanosomatid Angomonas deanei.",
+      "added_date": "2026-03-11T03:44:30.324157"
+    },
+    {
+      "doi": "10.1038/s41467-026-68797-3",
+      "title": "HIV-seq reveals gene expression differences between HIV-transcribing cells from viremic and suppressed people with HIV.",
+      "added_date": "2026-03-11T03:44:30.324213"
+    },
+    {
+      "doi": "10.1038/s41467-026-68864-9",
+      "title": "Integrative epigenomic landscape of Alzheimer's Disease brains reveals oligodendrocyte molecular perturbations associated with tau.",
+      "added_date": "2026-03-11T03:44:30.324290"
+    },
+    {
+      "doi": "10.1371/journal.pcbi.1014030",
+      "title": "Assessment of dispersion metrics for estimating single-cell transcriptional variability",
+      "added_date": "2026-03-11T03:44:30.324340"
     }
   ],
-  "last_updated": "2026-03-10T07:54:24.849221"
+  "last_updated": "2026-03-11T03:44:30.324413"
 }
