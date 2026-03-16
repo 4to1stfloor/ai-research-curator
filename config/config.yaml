@@ -59,10 +59,10 @@ search:
     - cell atlas
 
     # Epigenetics & Chromatin
-    - epigenome
-    - chromatin accessibility
-    - histone modification
-    - DNA methylation
+    # - epigenome
+    # - chromatin accessibility
+    # - histone modification
+    # - DNA methylation
 
     # Cancer Biology
     - cancer genomics
@@ -72,8 +72,8 @@ search:
     - immunotherapy
 
     # Cell Biology
-    - organoid
-    - stem cell differentiation
+    # - organoid
+    # - stem cell differentiation
     - lineage tracing
     - cell fate
 
@@ -81,14 +81,14 @@ search:
     - proteomics
     - metabolomics
 
-    # CRISPR & Gene Editing
-    - CRISPR screen
-    - gene editing
+    # Drug Discovery
+    - AI drug discovery
+    - drug target discovery
+    - drug repurposing
 
     # AI in Biology
     - deep learning genomics
     - machine learning biology
-    - AI drug discovery
 
   # 가져올 최대 논문 수
   max_papers: 5
@@ -98,6 +98,10 @@ search:
 
   # Open Access 논문만 처리
   open_access_only: true
+
+  # Non-OA 논문도 Abstract 기반 요약으로 포함 (open_access_only: true일 때 적용)
+  # OA 논문 우선, 남은 슬롯에 non-OA 논문 채움 (합산 max_papers)
+  include_abstract_only: true
 
 # 스케줄 설정 (GitHub Actions용)
 schedule:

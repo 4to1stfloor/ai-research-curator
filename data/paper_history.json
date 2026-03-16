@@ -81,30 +81,125 @@
       "added_date": "2026-03-10T07:54:24.848920"
     },
     {
+      "doi": "10.1126/sciadv.ady8546",
+      "title": "Epithelial plasticity shapes intratumoral heterogeneity and cell lineages in early-stage lung cancer.",
+      "added_date": "2026-03-10T08:59:54.706981"
+    },
+    {
+      "doi": "10.1038/s41467-026-69744-y",
+      "title": "TCL1A mediates DNA methylation defects in recurrent hydatidiform mole with NLRP7 pathogenic variants.",
+      "added_date": "2026-03-10T08:59:54.707066"
+    },
+    {
+      "doi": "10.1038/s41467-025-67710-8",
+      "title": "Molecular basis for the inhibition of de novo DNA methylation by TCL1A.",
+      "added_date": "2026-03-10T08:59:54.707108"
+    },
+    {
       "doi": "10.1186/s12859-025-06365-0",
       "title": "DNA sequence contamination analyzer (DNASCAN): a supervised analysis toolkit for detecting and removing DNA contaminants.",
-      "added_date": "2026-03-11T03:44:30.324110"
+      "added_date": "2026-03-10T08:59:54.707166"
     },
     {
       "doi": "10.1038/s41467-026-70084-0",
       "title": "Subcellular proteomics reveals a blueprint for endosymbiont integration in trypanosomatid Angomonas deanei.",
-      "added_date": "2026-03-11T03:44:30.324157"
+      "added_date": "2026-03-10T08:59:54.707213"
     },
     {
-      "doi": "10.1038/s41467-026-68797-3",
-      "title": "HIV-seq reveals gene expression differences between HIV-transcribing cells from viremic and suppressed people with HIV.",
-      "added_date": "2026-03-11T03:44:30.324213"
+      "doi": "10.7554/eLife.109950",
+      "title": "Defining the chromatin-associated protein landscapes on <i>Trypanosoma brucei</i> repetitive elements using synthetic TALE proteins",
+      "added_date": "2026-03-11T14:02:23.857588"
     },
     {
-      "doi": "10.1038/s41467-026-68864-9",
-      "title": "Integrative epigenomic landscape of Alzheimer's Disease brains reveals oligodendrocyte molecular perturbations associated with tau.",
-      "added_date": "2026-03-11T03:44:30.324290"
+      "doi": "10.1126/sciadv.aeb5934",
+      "title": "Microrobotic copper-rich electrochemical interfacing for targeted cancer theranostics in the gut.",
+      "added_date": "2026-03-16T15:18:05.308757"
     },
     {
-      "doi": "10.1371/journal.pcbi.1014030",
-      "title": "Assessment of dispersion metrics for estimating single-cell transcriptional variability",
-      "added_date": "2026-03-11T03:44:30.324340"
+      "doi": "10.1126/sciadv.aed2258",
+      "title": "0.33g mitigates muscle atrophy while 0.67g preserves muscle function and myofiber type composition in mice during spaceflight.",
+      "added_date": "2026-03-16T15:18:05.308824"
+    },
+    {
+      "doi": "10.1126/sciadv.aeb3800",
+      "title": "Disrupting USP14-mediated PARP1 dynamics reinstates MIC-A/B-driven antigen-independent CD8+ T cell killing in glioma.",
+      "added_date": "2026-03-16T15:18:05.308879"
+    },
+    {
+      "doi": "10.1186/s13059-026-04002-4",
+      "title": "Systematic evaluation of single-cell multimodal data integration enhances cell type resolution and discovery of clinically relevant states in complex tissues.",
+      "added_date": "2026-03-16T15:18:05.308936"
+    },
+    {
+      "doi": "10.1371/journal.pcbi.1014050",
+      "title": "Multi-omics and network pharmacology identify IGFBP1 as an m6A-Epigenetic target of pueraria in NSCLC therapy.",
+      "added_date": "2026-03-16T15:18:05.308989"
+    },
+    {
+      "doi": "10.1126/sciadv.aeb1611",
+      "title": "Chromosomal instability shapes the tumor microenvironment of esophageal adenocarcinoma via a cGAS-chemokine-myeloid axis.",
+      "added_date": "2026-03-16T15:32:39.611382"
+    },
+    {
+      "doi": "10.1126/sciadv.aea6805",
+      "title": "Type 2 lymphocytes restrict type 3 lymphocytes during liver fibrosis and colocalize in fibroblast niches.",
+      "added_date": "2026-03-16T15:32:39.611524"
+    },
+    {
+      "doi": "10.1126/sciadv.adr1776",
+      "title": "miR-203 facilitates timely cell fate transitions via epigenetic modulation during early embryogenesis.",
+      "added_date": "2026-03-16T15:32:39.611635"
+    },
+    {
+      "doi": "10.7554/eLife.100832",
+      "title": "Cell type-specific network analysis in Diversity Outbred mice identifies genes potentially responsible for human bone mineral density GWAS associations.",
+      "added_date": "2026-03-16T15:32:39.611757"
+    },
+    {
+      "doi": "10.1038/s41467-026-70715-6",
+      "title": "Identification of altered immune landscape at single-cell resolution in NSCLC brain metastasis and its association with poor immune checkpoint inhibitor responses.",
+      "added_date": "2026-03-16T15:32:39.611899"
+    },
+    {
+      "doi": "10.1038/s41467-026-69944-6",
+      "title": "Multi-modal dissection of cell-type specific TDP-43 pathology in the motor cortex.",
+      "added_date": "2026-03-16T15:32:39.612016"
+    },
+    {
+      "doi": "10.1038/s41467-026-69241-2",
+      "title": "Epilepsy-associated FOXJ3 variants link a transcriptional program of the PTEN-mTOR pathway to neuronal specification and cortical lamination.",
+      "added_date": "2026-03-16T15:32:39.612126"
+    },
+    {
+      "doi": "10.1016/j.ccell.2025.12.021",
+      "title": "Armored macrophage-targeted CAR-T cells reset and reprogram the tumor microenvironment and control metastatic cancer growth.",
+      "added_date": "2026-03-16T15:32:39.612262"
+    },
+    {
+      "doi": "10.1186/s12864-026-12667-1",
+      "title": "Insights from pooled CRISPRi single-cell screens in K562 cells reveal gene functions, regulatory networks, and highlight opportunities and limitations.",
+      "added_date": "2026-03-16T15:39:48.316403"
+    },
+    {
+      "doi": "10.1093/bioinformatics/btag122",
+      "title": "Scalable analysis of whole slide spatial proteomics with Harpy.",
+      "added_date": "2026-03-16T15:39:48.316553"
+    },
+    {
+      "doi": "10.1093/bioinformatics/btag127",
+      "title": "Competing Subclones and Fitness Diversity Shape Tumor Evolution Across Cancer Types.",
+      "added_date": "2026-03-16T15:39:48.316630"
+    },
+    {
+      "doi": "10.1016/j.ccell.2026.02.012",
+      "title": "The landscape of structural variation in pediatric cancer.",
+      "added_date": "2026-03-16T15:39:48.316701"
+    },
+    {
+      "doi": "10.1038/s41467-026-70505-0",
+      "title": "Multimodal framework for the joint analysis of single-cell RNA and T cell receptor sequencing data predicts T cell response to cancer immunotherapy.",
+      "added_date": "2026-03-16T15:39:48.316798"
     }
   ],
-  "last_updated": "2026-03-11T03:44:30.324413"
+  "last_updated": "2026-03-16T15:39:48.317340"
 }

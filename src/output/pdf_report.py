@@ -1,6 +1,7 @@
 """HTML/PDF report generator with improved design and Mermaid support."""
 
 import base64
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -198,6 +199,31 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             color: var(--text-primary);
             line-height: 1.4;
             margin-bottom: 1rem;
+        }}
+
+        .badge-abstract-only {{
+            display: inline-block;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.6rem;
+            border-radius: 1rem;
+            vertical-align: middle;
+            margin-left: 0.5rem;
+            letter-spacing: 0.03em;
+        }}
+
+        .badge-abstract-only-sm {{
+            display: inline-block;
+            background: var(--warning);
+            color: white;
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0.15rem 0.5rem;
+            border-radius: 0.75rem;
+            vertical-align: middle;
+            margin-left: 0.5rem;
         }}
 
         .paper-meta {{
@@ -600,6 +626,65 @@ PAPER_SECTION_TEMPLATE = """
 </article>
 """
 
+PAPER_SECTION_ABSTRACT_ONLY_TEMPLATE = """
+<article class="paper" id="paper-{index}">
+    <header class="paper-header">
+        <div class="paper-num">{index}</div>
+        <h2 class="paper-title">{title} <span class="badge-abstract-only">Abstract Only</span></h2>
+        <div class="paper-meta">
+            <span class="meta-item">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M1 2.828c.885-.37 2.154-.769 3.388-.893 1.33-.134 2.458.063 3.112.752v9.746c-.935-.53-2.12-.603-3.213-.493-1.18.12-2.37.461-3.287.811V2.828zm7.5-.141c.654-.689 1.782-.886 3.112-.752 1.234.124 2.503.523 3.388.893v9.923c-.918-.35-2.107-.692-3.287-.81-1.094-.111-2.278-.039-3.213.492V2.687zM8 1.783C7.015.936 5.587.81 4.287.94c-1.514.153-3.042.672-3.994 1.105A.5.5 0 0 0 0 2.5v11a.5.5 0 0 0 .707.455c.882-.4 2.303-.881 3.68-1.02 1.409-.142 2.59.087 3.223.877a.5.5 0 0 0 .78 0c.633-.79 1.814-1.019 3.222-.877 1.378.139 2.8.62 3.681 1.02A.5.5 0 0 0 16 13.5v-11a.5.5 0 0 0-.293-.455c-.952-.433-2.48-.952-3.994-1.105C10.413.809 8.985.936 8 1.783z"/>
+                </svg>
+                {journal}
+            </span>
+            <span class="meta-item">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M11 6.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm-3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm-5 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1z"/>
+                    <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
+                </svg>
+                {pub_date}
+            </span>
+            <span class="meta-item">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/>
+                    <path fill-rule="evenodd" d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/>
+                </svg>
+                <a href="{url}" target="_blank">{doi}</a>
+            </span>
+        </div>
+    </header>
+
+    <div class="paper-body">
+        <section class="section">
+            <h3 class="section-title">
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5 4a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1H5zm-.5 2.5A.5.5 0 0 1 5 6h6a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5zM5 8a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1H5zm0 2a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1H5z"/>
+                    <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm10-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1z"/>
+                </svg>
+                연구 개요 <span class="badge-abstract-only-sm">초록 기반</span>
+            </h3>
+            <div class="section-content summary-prose">
+                {summary}
+            </div>
+        </section>
+
+        <section class="section">
+            <h3 class="section-title">
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2z"/>
+                    <path d="M2 4.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5z"/>
+                </svg>
+                Abstract (한국어 번역)
+            </h3>
+            <div class="section-content">
+                {translation}
+            </div>
+        </section>
+    </div>
+</article>
+"""
+
 
 class PDFReportGenerator:
     """Generate PDF/HTML reports from processed papers."""
@@ -861,11 +946,14 @@ class PDFReportGenerator:
         # Generate TOC
         toc_items = []
         for i, pp in enumerate(processed_papers, 1):
-            title_short = pp.paper.title[:60] + "..." if len(pp.paper.title) > 60 else pp.paper.title
+            title_plain = re.sub(r'<[^>]+>', '', pp.paper.title)
+            title_short = title_plain[:60] + "..." if len(title_plain) > 60 else title_plain
+            is_abstract_only = pp.processing_info.abstract_only and not (pp.paper.is_open_access or pp.paper.pdf_url)
+            badge = ' <span class="badge-abstract-only-sm">Abstract</span>' if is_abstract_only else ''
             toc_items.append(f'''
             <div class="toc-item">
                 <span class="toc-num">{i}</span>
-                <a href="#paper-{i}">{title_short}</a>
+                <a href="#paper-{i}">{title_short}{badge}</a>
             </div>
             ''')
 
@@ -875,23 +963,38 @@ class PDFReportGenerator:
             paper = pp.paper
             paper_id = paper.doi or paper.title
 
-            # Get figure explanation and diagram
-            fig_explanation = figure_explanations.get(paper_id, "")
-            diagram = diagrams.get(paper_id, "")
+            # Check if this is an abstract-only (non-OA) paper
+            is_abstract_only = pp.processing_info.abstract_only and not (paper.is_open_access or paper.pdf_url)
 
-            section = PAPER_SECTION_TEMPLATE.format(
-                index=i,
-                title=paper.title,
-                journal=paper.journal,
-                pub_date=paper.publication_date.strftime("%Y-%m-%d") if paper.publication_date else "N/A",
-                url=paper.url,
-                doi=paper.doi or "N/A",
-                summary=self._format_summary(pp.summary_korean),
-                translation=self._format_translation(pp.abstract_translation),
-                figures_section=self._format_figures(pp.figures),
-                figure_explanation_section=self._format_figure_explanation(fig_explanation),
-                diagram_section=self._format_diagram(diagram)
-            )
+            if is_abstract_only:
+                section = PAPER_SECTION_ABSTRACT_ONLY_TEMPLATE.format(
+                    index=i,
+                    title=paper.title,
+                    journal=paper.journal,
+                    pub_date=paper.publication_date.strftime("%Y-%m-%d") if paper.publication_date else "N/A",
+                    url=paper.url,
+                    doi=paper.doi or "N/A",
+                    summary=self._format_summary(pp.summary_korean),
+                    translation=self._format_translation(pp.abstract_translation)
+                )
+            else:
+                # Get figure explanation and diagram
+                fig_explanation = figure_explanations.get(paper_id, "")
+                diagram = diagrams.get(paper_id, "")
+
+                section = PAPER_SECTION_TEMPLATE.format(
+                    index=i,
+                    title=paper.title,
+                    journal=paper.journal,
+                    pub_date=paper.publication_date.strftime("%Y-%m-%d") if paper.publication_date else "N/A",
+                    url=paper.url,
+                    doi=paper.doi or "N/A",
+                    summary=self._format_summary(pp.summary_korean),
+                    translation=self._format_translation(pp.abstract_translation),
+                    figures_section=self._format_figures(pp.figures),
+                    figure_explanation_section=self._format_figure_explanation(fig_explanation),
+                    diagram_section=self._format_diagram(diagram)
+                )
             paper_sections.append(section)
 
         # Generate full HTML

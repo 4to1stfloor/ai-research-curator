@@ -311,17 +311,23 @@ class PaperDigestPipeline:
             console.print(f"[yellow]Filtered out {filtered_count} non-research articles (Review, Perspective, etc.)[/yellow]")
         unique_papers = research_papers
 
-        # Filter open access only if enabled
-        if self.config.search.open_access_only:
+        # Filter open access only (unless include_abstract_only is enabled)
+        max_papers = self.config.search.max_papers
+        if self.config.search.open_access_only and not self.config.search.include_abstract_only:
             open_access_papers = [p for p in unique_papers if p.is_open_access or p.pdf_url]
             console.print(f"[yellow]Open access only: {len(open_access_papers)} papers[/yellow]")
             unique_papers = open_access_papers
 
         # Limit to max_papers
-        max_papers = self.config.search.max_papers
         if len(unique_papers) > max_papers:
             unique_papers = unique_papers[:max_papers]
             console.print(f"[yellow]Limited to {max_papers} papers[/yellow]")
+
+        # Log OA vs non-OA counts
+        oa_count = len([p for p in unique_papers if p.is_open_access or p.pdf_url])
+        non_oa_count = len(unique_papers) - oa_count
+        if non_oa_count > 0:
+            console.print(f"[yellow]Open access: {oa_count} | Abstract only: {non_oa_count}[/yellow]")
 
         return unique_papers
 
@@ -368,6 +374,9 @@ class PaperDigestPipeline:
                 # Initialize processing info for this paper
                 proc_info = ProcessingInfo()
 
+                # Determine if this is a non-OA abstract-only paper
+                is_non_oa = not (paper.is_open_access or paper.pdf_url)
+
                 # Fetch abstract from DOI if not available or too short (e.g., RSS source)
                 if paper.doi and (not paper.abstract or len(paper.abstract) < 500):
                     fetched_abstract = self.content_fetcher.fetch_abstract_from_doi(paper.doi)
@@ -380,63 +389,71 @@ class PaperDigestPipeline:
                     figures = []
                     figure_legends = []
 
-                    # Method 1: Try web-based figure extraction first (more accurate)
-                    console.print(f"[cyan]Fetching figures from web: {paper.title[:40]}...[/cyan]")
-                    content = self.content_fetcher.fetch_content(paper)
-
-                    if content.get("text"):
-                        body_text = content.get("text", "")
-                        proc_info.full_text_available = True
-                        proc_info.abstract_only = False
-
-                    figures = content.get("figures", [])
-                    if figures:
-                        proc_info.figures_extracted = True
-                        proc_info.figures_source = content.get("source", "web")
-                        proc_info.figures_count = len(figures)
-                        proc_info.add_note(f"{proc_info.figures_source}에서 {len(figures)}개 Figure 추출")
-
-                    if content.get("figure_legends"):
-                        figure_legends_text = content.get("figure_legends", "")
-                        for legend in figure_legends_text.split("\n\n"):
-                            if legend.strip():
-                                match = re.match(r'Figure\s+(\d+[A-Za-z]?):\s*(.+)', legend, re.DOTALL)
-                                if match:
-                                    figure_legends.append({
-                                        "figure_num": match.group(1),
-                                        "legend": match.group(2).strip()
-                                    })
-
-                    # Method 2: Parse local PDF for text (not figures - web is more accurate)
-                    if paper.local_pdf_path:
-                        proc_info.pdf_downloaded = True
-                        proc_info.add_note("PDF 다운로드 완료")
-
-                        parsed = self.pdf_parser.parse_paper(paper, extract_figures=False)
-                        if not body_text and parsed.get("text"):
-                            body_text = parsed.get("text", "")
-                            proc_info.full_text_available = True
-                            proc_info.abstract_only = False
-                            proc_info.add_note("PDF에서 본문 추출 완료")
-
-                        if parsed.get("figure_legends"):
-                            figure_legends.extend(parsed.get("figure_legends", []))
-                    else:
+                    if is_non_oa:
+                        # Non-OA: abstract 기반 요약만 (PDF/Figure 스킵)
                         proc_info.pdf_downloaded = False
-                        proc_info.pdf_download_error = "PDF를 찾을 수 없음"
-
-                    # Set final status if no figures extracted
-                    if not figures:
-                        proc_info.figures_extracted = False
-                        if not proc_info.figures_error:
-                            proc_info.figures_error = "Figure를 추출할 수 있는 소스가 없음"
-                        proc_info.add_note("Figure 없음 - Abstract 기반 분석만 진행")
-
-                    # Set abstract_only status if no body text
-                    if not body_text:
                         proc_info.full_text_available = False
                         proc_info.abstract_only = True
-                        proc_info.add_note("본문 없음 - Abstract만 분석")
+                        proc_info.add_note("Non-OA 논문 - Abstract 기반 분석")
+                    else:
+                        # OA: 기존 전체 처리 플로우
+                        # Method 1: Try web-based figure extraction first (more accurate)
+                        console.print(f"[cyan]Fetching figures from web: {paper.title[:40]}...[/cyan]")
+                        content = self.content_fetcher.fetch_content(paper)
+
+                        if content.get("text"):
+                            body_text = content.get("text", "")
+                            proc_info.full_text_available = True
+                            proc_info.abstract_only = False
+
+                        figures = content.get("figures", [])
+                        if figures:
+                            proc_info.figures_extracted = True
+                            proc_info.figures_source = content.get("source", "web")
+                            proc_info.figures_count = len(figures)
+                            proc_info.add_note(f"{proc_info.figures_source}에서 {len(figures)}개 Figure 추출")
+
+                        if content.get("figure_legends"):
+                            figure_legends_text = content.get("figure_legends", "")
+                            for legend in figure_legends_text.split("\n\n"):
+                                if legend.strip():
+                                    match = re.match(r'Figure\s+(\d+[A-Za-z]?):\s*(.+)', legend, re.DOTALL)
+                                    if match:
+                                        figure_legends.append({
+                                            "figure_num": match.group(1),
+                                            "legend": match.group(2).strip()
+                                        })
+
+                        # Method 2: Parse local PDF for text (not figures - web is more accurate)
+                        if paper.local_pdf_path:
+                            proc_info.pdf_downloaded = True
+                            proc_info.add_note("PDF 다운로드 완료")
+
+                            parsed = self.pdf_parser.parse_paper(paper, extract_figures=False)
+                            if not body_text and parsed.get("text"):
+                                body_text = parsed.get("text", "")
+                                proc_info.full_text_available = True
+                                proc_info.abstract_only = False
+                                proc_info.add_note("PDF에서 본문 추출 완료")
+
+                            if parsed.get("figure_legends"):
+                                figure_legends.extend(parsed.get("figure_legends", []))
+                        else:
+                            proc_info.pdf_downloaded = False
+                            proc_info.pdf_download_error = "PDF를 찾을 수 없음"
+
+                        # Set final status if no figures extracted
+                        if not figures:
+                            proc_info.figures_extracted = False
+                            if not proc_info.figures_error:
+                                proc_info.figures_error = "Figure를 추출할 수 있는 소스가 없음"
+                            proc_info.add_note("Figure 없음 - Abstract 기반 분석만 진행")
+
+                        # Set abstract_only status if no body text
+                        if not body_text:
+                            proc_info.full_text_available = False
+                            proc_info.abstract_only = True
+                            proc_info.add_note("본문 없음 - Abstract만 분석")
 
                     # Store body text for figure explanation
                     paper_id = paper.doi or paper.title
@@ -736,8 +753,10 @@ flowchart TD
         table.add_column("No", style="cyan")
         table.add_column("Title", style="white")
         table.add_column("Journal", style="green")
+        table.add_column("Type", style="magenta")
         for i, p in enumerate(papers, 1):
-            table.add_row(str(i), p.title[:60] + "...", p.journal)
+            access_type = "OA" if (p.is_open_access or p.pdf_url) else "Abstract"
+            table.add_row(str(i), p.title[:60] + "...", p.journal, access_type)
         console.print(table)
 
         # 3. Download

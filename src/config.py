@@ -27,6 +27,7 @@ class SearchConfig(BaseModel):
     max_papers: int = 5
     days_lookback: int = 7
     open_access_only: bool = False  # Only process open access papers (with PDFs)
+    include_abstract_only: bool = True  # Include non-OA papers with abstract-only summary
 
 
 class ScheduleConfig(BaseModel):
