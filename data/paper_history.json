@@ -199,7 +199,32 @@
       "doi": "10.1038/s41467-026-70505-0",
       "title": "Multimodal framework for the joint analysis of single-cell RNA and T cell receptor sequencing data predicts T cell response to cancer immunotherapy.",
       "added_date": "2026-03-16T15:39:48.316798"
+    },
+    {
+      "doi": "10.1371/journal.pcbi.1014058",
+      "title": "TUSCAN: Tumor segmentation and classification analysis in spatial transcriptomics.",
+      "added_date": "2026-03-18T03:22:03.080147"
+    },
+    {
+      "doi": "10.7554/eLife.107538",
+      "title": "p53-induced RNA-binding protein ZMAT3 inhibits transcription of a hexokinase to suppress mitochondrial respiration in human cancer cells.",
+      "added_date": "2026-03-18T03:22:03.080213"
+    },
+    {
+      "doi": "10.1038/s41467-026-70624-8",
+      "title": "BMP-Smad1/9 signaling plays a critical role in regulating zebrafish PGC proliferation.",
+      "added_date": "2026-03-18T03:22:03.080277"
+    },
+    {
+      "doi": "10.1038/s41467-026-70528-7",
+      "title": "FineST: contrastive learning integrates histology and spatial transcriptomics for nuclei-resolved ligand-receptor analysis.",
+      "added_date": "2026-03-18T03:22:03.080310"
+    },
+    {
+      "doi": "10.1038/s41467-026-70399-y",
+      "title": "Single-cell multi-omic analysis of mitochondrial mutational mosaicism and dynamics.",
+      "added_date": "2026-03-18T03:22:03.080340"
     }
   ],
-  "last_updated": "2026-03-16T15:39:48.317340"
+  "last_updated": "2026-03-18T03:22:03.080440"
 }
