@@ -224,7 +224,32 @@
       "doi": "10.1038/s41467-026-70399-y",
       "title": "Single-cell multi-omic analysis of mitochondrial mutational mosaicism and dynamics.",
       "added_date": "2026-03-18T03:22:03.080340"
+    },
+    {
+      "doi": "10.1371/journal.pgen.1012094",
+      "title": "mTOR signaling regulates demand-adapted hematopoiesis and metabolic reprogramming required for an effective cellular immune response in Drosophila melanogaster larvae.",
+      "added_date": "2026-03-25T03:21:33.265059"
+    },
+    {
+      "doi": "10.7554/eLife.107962",
+      "title": "Adaptor protein supersaturation drives innate immune signaling and cell fate.",
+      "added_date": "2026-03-25T03:21:33.265127"
+    },
+    {
+      "doi": "10.1038/s41588-026-02552-8",
+      "title": "Single-cell spatial transcriptomic analysis of human skin anatomy.",
+      "added_date": "2026-03-25T03:21:33.265165"
+    },
+    {
+      "doi": "10.1038/s41592-026-03042-9",
+      "title": "Integration of alternative fragmentation techniques into standard LC-MS workflows using a single deep learning model enhances proteome coverage.",
+      "added_date": "2026-03-25T03:21:33.265211"
+    },
+    {
+      "doi": "10.1038/s41467-026-71009-7",
+      "title": "KIF11 prevents retinal endothelial ferroptosis in familial exudative vitreoretinopathy by inhibiting phosphorylation-driven PRDX1 phase separation.",
+      "added_date": "2026-03-25T03:21:33.265270"
     }
   ],
-  "last_updated": "2026-03-18T03:22:03.080440"
+  "last_updated": "2026-03-25T03:21:33.265440"
 }
