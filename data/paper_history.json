@@ -249,7 +249,32 @@
       "doi": "10.1038/s41467-026-71009-7",
       "title": "KIF11 prevents retinal endothelial ferroptosis in familial exudative vitreoretinopathy by inhibiting phosphorylation-driven PRDX1 phase separation.",
       "added_date": "2026-03-25T03:21:33.265270"
+    },
+    {
+      "doi": "10.1371/journal.pcbi.1014137",
+      "title": "Multiscale modeling of the spatial structure of stem cells in neuroblastoma patient-derived tumoroids reveals a critical role for a short-range diffusive process.",
+      "added_date": "2026-04-01T04:05:51.085147"
+    },
+    {
+      "doi": "10.1093/bioinformatics/btag135",
+      "title": "Local transcriptional covariation produces accurate estimates of cell phenotype.",
+      "added_date": "2026-04-01T04:05:51.085209"
+    },
+    {
+      "doi": "10.1186/s13059-026-04055-5",
+      "title": "Benchmarking single-cell tumor immune atlases and application for uncovering cell states related to immunotherapy response.",
+      "added_date": "2026-04-01T04:05:51.085256"
+    },
+    {
+      "doi": "10.1038/s41591-026-04283-z",
+      "title": "Quemliclustat and chemotherapy with or without zimberelimab in metastatic pancreatic adenocarcinoma: a randomized phase 1 trial.",
+      "added_date": "2026-04-01T04:05:51.085312"
+    },
+    {
+      "doi": "10.1038/s41587-026-03104-5",
+      "title": "Engineering macrophage-targeted trispecific immune cell engagers for tumor immunotherapy.",
+      "added_date": "2026-04-01T04:05:51.085349"
     }
   ],
-  "last_updated": "2026-03-25T03:21:33.265440"
+  "last_updated": "2026-04-01T04:05:51.085459"
 }
