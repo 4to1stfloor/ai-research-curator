@@ -127,6 +127,7 @@ class EnvConfig(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 def load_config(config_path: str | Path = "config/config.yaml") -> tuple[AppConfig, EnvConfig]:

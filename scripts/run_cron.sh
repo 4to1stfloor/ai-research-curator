@@ -29,7 +29,7 @@ fi
 cd "${SCRIPT_DIR}"
 echo "[Update] git pull..." >> "${LOG_FILE}"
 STASHED=false
-if ! git diff --quiet data/ 2>/dev/null; then
+if ! git diff --quiet HEAD -- data/ 2>/dev/null; then
     git stash push -m "cron-auto-stash" -- data/ >> "${LOG_FILE}" 2>&1 && STASHED=true
     echo "[Update] Stashed local data changes" >> "${LOG_FILE}"
 fi
