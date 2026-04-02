@@ -162,6 +162,114 @@ ollama pull llama3.1:8b
 
 `config/config.yaml` 수정:
 
+### 검색 대상 필터 (Target Organism)
+
+계층적 필터링으로 원하는 분야의 논문만 정확하게 검색합니다.
+PubMed MeSH term 기반으로 동작하며, 키워드와 결합하여 해당 생물/질환 범위 내에서 매칭합니다.
+
+```
+target_organism → human_category → cancer_tissues
+                    │                  │
+                    │                  ├─ lung, breast, colon, stomach, liver
+                    │                  ├─ pancreas, prostate, brain, ovarian
+                    │                  └─ kidney, skin, leukemia, lymphoma
+                    │
+                    ├─ cancer      ← "Neoplasms"[MeSH]
+                    └─ non-cancer  ← NOT "Neoplasms"[MeSH]
+
+target_organism 선택:
+  ├─ human         ← "Humans"[MeSH]
+  ├─ mouse         ← "Mice"[MeSH]
+  ├─ plant         ← "Plants"[MeSH]
+  ├─ bacteria      ← "Bacteria"[MeSH]
+  └─ other_animal  ← "Animals"[MeSH] (human, mouse 제외)
+```
+
+#### 예시 1: Human Cancer 전체 (기본값)
+
+```yaml
+search:
+  target_organism:
+    - human
+  human_category:
+    - cancer
+  cancer_tissues: []        # 빈 리스트 = 모든 암종
+  keywords:
+    - single-cell RNA-seq
+    - tumor microenvironment
+    # ... 키워드는 cancer 범위 내에서 매칭됨
+```
+
+#### 예시 2: 폐암 + 유방암만
+
+```yaml
+search:
+  target_organism:
+    - human
+  human_category:
+    - cancer
+  cancer_tissues:
+    - lung
+    - breast
+```
+
+#### 예시 3: 박테리아 연구
+
+```yaml
+search:
+  target_organism:
+    - bacteria
+  human_category: []        # 무시됨 (human이 아니므로)
+  cancer_tissues: []        # 무시됨
+  keywords:
+    - single-cell RNA-seq   # 동일한 키워드가 bacteria 범위에서 매칭
+    - multi-omics
+    - metabolomics
+```
+
+#### 예시 4: Human 전체 (cancer + non-cancer)
+
+```yaml
+search:
+  target_organism:
+    - human
+  human_category:
+    - cancer
+    - non-cancer
+  cancer_tissues: []
+```
+
+#### 예시 5: Mouse + Human 모두
+
+```yaml
+search:
+  target_organism:
+    - human
+    - mouse
+  human_category:
+    - cancer
+```
+
+### Non-OA 논문 포함 (Abstract Only)
+
+Open Access가 아닌 논문도 Abstract 기반 요약으로 포함할 수 있습니다:
+
+```yaml
+search:
+  open_access_only: true         # OA 필터 활성화
+  include_abstract_only: true    # Non-OA도 abstract 기반으로 포함
+  max_papers: 10                 # OA + Non-OA 합산
+```
+
+| 논문 유형 | 연구 개요 | Abstract 번역 | Figures | Figure 해설 | 다이어그램 |
+|-----------|:---------:|:-------------:|:-------:|:-----------:|:---------:|
+| **OA (전문 분석)** | ✅ 전문 기반 | ✅ | ✅ | ✅ | ✅ |
+| **Non-OA (Abstract Only)** | ✅ 초록 기반 | ✅ | ❌ | ❌ | ✅ |
+
+> Non-OA 논문은 HTML 리포트에서 `Abstract Only` 배지로 구분됩니다.
+
+### 기본 설정
+
 ```yaml
 search:
   journals:
@@ -175,7 +283,6 @@ search:
     - machine learning
   max_papers: 5
   days_lookback: 7
-  open_access_only: true  # Open Access 논문만 처리
 
 ai:
   # auto (권장): Claude CLI → API Key → Ollama 순서로 자동 감지

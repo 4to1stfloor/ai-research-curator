@@ -249,7 +249,10 @@ class PaperDigestPipeline:
                     keywords=search_config.keywords,
                     journals=search_config.journals,
                     max_papers=search_config.max_papers * search_multiplier,
-                    days_lookback=days
+                    days_lookback=days,
+                    target_organism=search_config.target_organism,
+                    human_category=search_config.human_category,
+                    cancer_tissues=search_config.cancer_tissues,
                 )
                 all_papers.extend(papers)
                 progress.update(task, completed=True)

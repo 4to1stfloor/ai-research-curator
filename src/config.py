@@ -24,6 +24,9 @@ class SearchConfig(BaseModel):
         "single-cell RNA-seq", "scRNA-seq",
         "machine learning", "deep learning"
     ]
+    target_organism: list[str] = ["human"]  # human, mouse, plant, bacteria, other_animal
+    human_category: list[str] = ["cancer"]  # cancer, non-cancer
+    cancer_tissues: list[str] = []  # lung, breast, colon, stomach, liver, etc. (empty = all)
     max_papers: int = 5
     days_lookback: int = 7
     open_access_only: bool = False  # Only process open access papers (with PDFs)

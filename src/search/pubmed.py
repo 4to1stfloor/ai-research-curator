@@ -31,11 +31,46 @@ class PubMedSearcher:
             "User-Agent": "AutoPaperScraper/1.0"
         })
 
+    # MeSH terms for organism filtering
+    ORGANISM_MESH = {
+        "human": '"Humans"[MeSH]',
+        "mouse": '"Mice"[MeSH]',
+        "plant": '"Plants"[MeSH]',
+        "bacteria": '"Bacteria"[MeSH]',
+        "other_animal": '("Animals"[MeSH] NOT "Humans"[MeSH] NOT "Mice"[MeSH])',
+    }
+
+    # MeSH terms for human disease category
+    HUMAN_CATEGORY_MESH = {
+        "cancer": '"Neoplasms"[MeSH]',
+        "non-cancer": '(NOT "Neoplasms"[MeSH])',
+    }
+
+    # MeSH terms for cancer tissue types
+    CANCER_TISSUE_MESH = {
+        "lung": '"Lung Neoplasms"[MeSH]',
+        "breast": '"Breast Neoplasms"[MeSH]',
+        "colon": '"Colorectal Neoplasms"[MeSH]',
+        "stomach": '"Stomach Neoplasms"[MeSH]',
+        "liver": '"Liver Neoplasms"[MeSH]',
+        "pancreas": '"Pancreatic Neoplasms"[MeSH]',
+        "prostate": '"Prostatic Neoplasms"[MeSH]',
+        "brain": '"Brain Neoplasms"[MeSH]',
+        "ovarian": '"Ovarian Neoplasms"[MeSH]',
+        "kidney": '"Kidney Neoplasms"[MeSH]',
+        "skin": '"Skin Neoplasms"[MeSH]',
+        "leukemia": '"Leukemia"[MeSH]',
+        "lymphoma": '"Lymphoma"[MeSH]',
+    }
+
     def _build_query(
         self,
         keywords: list[str],
         journals: list[str],
-        days_lookback: int
+        days_lookback: int,
+        target_organism: list[str] = None,
+        human_category: list[str] = None,
+        cancer_tissues: list[str] = None,
     ) -> str:
         """Build PubMed search query."""
         # Keyword part (OR)
@@ -49,8 +84,41 @@ class PubMedSearcher:
         start_date = end_date - timedelta(days=days_lookback)
         date_query = f'{start_date.strftime("%Y/%m/%d")}:{end_date.strftime("%Y/%m/%d")}[Date - Publication]'
 
-        # Combine: (keywords) AND (journals) AND date
+        # Organism filter (MeSH)
+        organism_parts = []
+        if target_organism:
+            for org in target_organism:
+                mesh = self.ORGANISM_MESH.get(org)
+                if mesh:
+                    organism_parts.append(mesh)
+
+        # Human sub-category filter
+        category_parts = []
+        if human_category and target_organism and "human" in target_organism:
+            for cat in human_category:
+                mesh = self.HUMAN_CATEGORY_MESH.get(cat)
+                if mesh:
+                    category_parts.append(mesh)
+
+        # Cancer tissue filter
+        tissue_parts = []
+        if cancer_tissues and human_category and "cancer" in human_category:
+            for tissue in cancer_tissues:
+                mesh = self.CANCER_TISSUE_MESH.get(tissue)
+                if mesh:
+                    tissue_parts.append(mesh)
+
+        # Combine: (keywords) AND (journals) AND date AND [organism] AND [category] AND [tissue]
         query = f"({keyword_query}) AND ({journal_query}) AND ({date_query})"
+
+        if organism_parts:
+            query += f" AND ({' OR '.join(organism_parts)})"
+
+        if category_parts:
+            query += f" AND ({' OR '.join(category_parts)})"
+
+        if tissue_parts:
+            query += f" AND ({' OR '.join(tissue_parts)})"
 
         return query
 
@@ -198,13 +266,35 @@ class PubMedSearcher:
                 pmcid = pmc_elem.text
                 is_open_access = True
 
+            # DOI-based OA detection: known OA journals
+            if not is_open_access and journal:
+                oa_journals = {
+                    "nature communications", "science advances", "elife",
+                    "plos biology", "plos genetics", "plos computational biology",
+                    "plos one", "plos medicine", "plos pathogens",
+                    "genome biology", "bmc genomics", "bmc bioinformatics",
+                    "cell reports", "cell reports medicine",
+                    "nucleic acids research", "scientific reports",
+                    "frontiers in immunology", "frontiers in oncology",
+                    "frontiers in genetics", "frontiers in cell and developmental biology",
+                    "iscience", "heliyon", "embo molecular medicine",
+                }
+                if journal.lower() in oa_journals:
+                    is_open_access = True
+
+            # DOI-based OA detection: bioRxiv/medRxiv preprints
+            if not is_open_access and doi and "10.1101/" in doi:
+                is_open_access = True
+
             # URL
             url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" if pmid else ""
 
-            # PDF URL (for PMC articles)
+            # PDF URL (for PMC articles or OA journals via DOI)
             pdf_url = None
             if pmcid:
                 pdf_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/"
+            elif is_open_access and doi:
+                pdf_url = f"https://doi.org/{doi}"
 
             # Keywords
             keywords = []
@@ -282,7 +372,10 @@ class PubMedSearcher:
         keywords: list[str],
         journals: list[str],
         max_papers: int = 10,
-        days_lookback: int = 7
+        days_lookback: int = 7,
+        target_organism: list[str] = None,
+        human_category: list[str] = None,
+        cancer_tissues: list[str] = None,
     ) -> list[Paper]:
         """
         Search PubMed for papers.
@@ -292,11 +385,17 @@ class PubMedSearcher:
             journals: Journals to search in
             max_papers: Maximum number of papers to return
             days_lookback: Number of days to look back
+            target_organism: Organism filter (human, mouse, plant, bacteria, other_animal)
+            human_category: Human sub-category (cancer, non-cancer)
+            cancer_tissues: Cancer tissue types (lung, breast, colon, etc.)
 
         Returns:
             List of Paper objects
         """
-        query = self._build_query(keywords, journals, days_lookback)
+        query = self._build_query(
+            keywords, journals, days_lookback,
+            target_organism, human_category, cancer_tissues
+        )
         print(f"[PubMed] Searching with query: {query[:100]}...")
 
         # Search for PMIDs

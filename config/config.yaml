@@ -46,8 +46,21 @@ search:
     - PLOS Genetics
     - PLOS Computational Biology
 
+  # 대상 생물 필터 (MeSH term 기반)
+  # human, mouse, plant, bacteria, other_animal 중 선택 (복수 가능)
+  target_organism:
+    - human
+
+  # human 선택 시 세부 분류: cancer, non-cancer (복수 가능, 비워두면 전체)
+  human_category:
+    - cancer
+
+  # cancer 선택 시 조직 필터 (비워두면 전체 암종)
+  # 예: lung, breast, colon, stomach, liver, pancreas, prostate, brain, ovarian, kidney, skin
+  cancer_tissues: []
+
   # 검색 키워드 (OR 조건으로 검색)
-  # 생명과학/의생명 분야에 특화된 키워드만 사용
+  # target_organism과 결합하여 해당 생물 내에서 키워드 매칭
   keywords:
     # Genomics & Transcriptomics
     - single-cell RNA-seq
