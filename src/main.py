@@ -697,6 +697,27 @@ flowchart TD
             except Exception as e:
                 console.print(f"[yellow]PDF generation failed (using HTML): {e}[/yellow]")
 
+        # Send email
+        if self.config.output.email.enabled and result.get("html"):
+            console.print("[cyan]Sending email report...[/cyan]")
+            try:
+                from .output.email_sender import EmailSender
+                smtp_email = self.env_config.smtp_email
+                smtp_password = self.env_config.smtp_password
+                if smtp_email and smtp_password:
+                    sender = EmailSender(smtp_email, smtp_password)
+                    to_email = self.config.output.email.to_email or smtp_email
+                    sender.send_report(
+                        to_email=to_email,
+                        html_path=Path(result["html"]),
+                        paper_count=len(processed_papers),
+                        date_str=datetime.now().strftime("%Y-%m-%d"),
+                    )
+                else:
+                    console.print("[yellow]Email: SMTP_EMAIL / SMTP_PASSWORD not set in .env[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Email failed: {e}[/yellow]")
+
         # Generate Obsidian notes
         if self.obsidian_exporter:
             console.print("[cyan]Exporting to Obsidian...[/cyan]")

@@ -81,10 +81,17 @@ class ObsidianConfig(BaseModel):
     vault_path: str = "./output/obsidian"
 
 
+class EmailConfig(BaseModel):
+    """Email notification configuration."""
+    enabled: bool = False
+    to_email: Optional[str] = None  # Recipient (defaults to smtp_email if not set)
+
+
 class OutputConfig(BaseModel):
     """Output configuration."""
     pdf_report: bool = True
     obsidian: ObsidianConfig = Field(default_factory=ObsidianConfig)
+    email: EmailConfig = Field(default_factory=EmailConfig)
     reports_path: str = "./output/reports"
     output_dir: Optional[str] = None  # Custom base dir for all output
 
@@ -126,6 +133,10 @@ class EnvConfig(BaseSettings):
 
     # Optional
     pubmed_email: Optional[str] = Field(default=None, alias="PUBMED_EMAIL")
+
+    # Email (SMTP)
+    smtp_email: Optional[str] = Field(default=None, alias="SMTP_EMAIL")
+    smtp_password: Optional[str] = Field(default=None, alias="SMTP_PASSWORD")
 
     class Config:
         env_file = ".env"

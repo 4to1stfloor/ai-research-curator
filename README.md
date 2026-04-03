@@ -444,6 +444,38 @@ ai-research-curator/
 
 ## FAQ
 
+## 이메일 알림 설정
+
+리포트 생성 후 자동으로 이메일로 발송할 수 있습니다. Gmail 기준으로 설명합니다.
+
+### Step 1: Gmail App Password 발급 (1회)
+
+1. [Google 계정 설정](https://myaccount.google.com/apppasswords) 접속
+2. 앱 이름 입력 (예: `AI Research Curator`) → **만들기**
+3. 생성된 16자리 비밀번호 복사
+
+> 2단계 인증이 꺼져 있으면 App Password를 만들 수 없습니다. [2단계 인증 활성화](https://myaccount.google.com/signinoptions/two-step-verification) 후 진행하세요.
+
+### Step 2: .env에 SMTP 정보 입력
+
+```env
+SMTP_EMAIL=your_email@gmail.com
+SMTP_PASSWORD=abcd efgh ijkl mnop    # Step 1에서 복사한 App Password
+```
+
+### Step 3: config.yaml에서 이메일 활성화
+
+```yaml
+output:
+  email:
+    enabled: true
+    # to_email: other@gmail.com  # 다른 주소로 보내려면 설정, 미설정 시 자신에게 발송
+```
+
+이후 cron이나 수동 실행 시 HTML 리포트가 첨부파일로 자동 발송됩니다.
+
+## FAQ
+
 ### Q: PDF/Figure가 다운로드 안됩니다
 A: Open Access 논문만 자동 다운로드됩니다. `PUBMED_EMAIL`이 설정되어 있는지 확인하세요. 이 이메일은 Unpaywall API를 통해 Open Access PDF를 찾는 데 사용됩니다.
 
