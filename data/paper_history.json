@@ -369,7 +369,32 @@
       "doi": "10.7554/eLife.96446",
       "title": "Superoxide dismutases maintain niche homeostasis in stem cell populations",
       "added_date": "2026-04-02T14:02:06.040666"
+    },
+    {
+      "doi": "10.1126/sciadv.aea6734",
+      "title": "A stromal PAI1-tPA axis orchestrates immunosuppression in pancreatic cancer.",
+      "added_date": "2026-04-08T03:55:38.863834"
+    },
+    {
+      "doi": "10.1126/sciadv.aec8684",
+      "title": "Regulation of mitochondrial ROS by C15ORF48 in a basal cell subpopulation contributes to chemotherapy resistance in TNBC.",
+      "added_date": "2026-04-08T03:55:38.863871"
+    },
+    {
+      "doi": "10.1371/journal.pcbi.1014110",
+      "title": "Clustering single-cell multi-omics data via weighted distance penalty and adaptive consistent graph regularization",
+      "added_date": "2026-04-08T03:55:38.863921"
+    },
+    {
+      "doi": "doi:10.1038/s41556-026-01926-8",
+      "title": "Aberrant amino acid-sensing promotes immunotherapy resistance via the inflammatory cytokine–ZBTB5–mTORC1 axis",
+      "added_date": "2026-04-08T03:55:38.863986"
+    },
+    {
+      "doi": "doi:10.1126/science.adx1736",
+      "title": "Targeting modulated vascular smooth muscle cells in atherosclerosis via FAP-directed immunotherapy",
+      "added_date": "2026-04-08T03:55:38.864037"
     }
   ],
-  "last_updated": "2026-04-02T14:02:06.040950"
+  "last_updated": "2026-04-08T03:55:38.864181"
 }
