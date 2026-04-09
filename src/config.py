@@ -138,6 +138,9 @@ class EnvConfig(BaseSettings):
     smtp_email: Optional[str] = Field(default=None, alias="SMTP_EMAIL")
     smtp_password: Optional[str] = Field(default=None, alias="SMTP_PASSWORD")
 
+    # Output directory override (from .env, not tracked by git)
+    output_dir: Optional[str] = Field(default=None, alias="OUTPUT_DIR")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

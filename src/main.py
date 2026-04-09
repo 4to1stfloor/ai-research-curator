@@ -872,6 +872,9 @@ def main(config, max_papers, days, no_pdf, no_obsidian, dry_run, open_access_onl
             app_config.output.obsidian.enabled = False
         if open_access_only:
             app_config.search.open_access_only = True
+        # .env OUTPUT_DIR overrides config output_dir
+        if env_config.output_dir:
+            app_config.output.output_dir = env_config.output_dir
 
         # Check API keys (skip for dry-run, ollama)
         if not dry_run and app_config.ai.llm_provider not in ("ollama",):
