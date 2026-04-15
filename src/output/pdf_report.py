@@ -232,6 +232,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             gap: 1rem;
         }}
 
+        .paper-authors {{
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.75rem;
+            line-height: 1.5;
+        }}
+
         .meta-item {{
             display: flex;
             align-items: center;
@@ -588,6 +595,7 @@ PAPER_SECTION_TEMPLATE = """
                 <a href="{url}" target="_blank">{doi}</a>
             </span>
         </div>
+        <div class="paper-authors">{authors}</div>
     </header>
 
     <div class="paper-body">
@@ -653,6 +661,7 @@ PAPER_SECTION_ABSTRACT_ONLY_TEMPLATE = """
                 <a href="{url}" target="_blank">{doi}</a>
             </span>
         </div>
+        <div class="paper-authors">{authors}</div>
     </header>
 
     <div class="paper-body">
@@ -698,6 +707,15 @@ class PDFReportGenerator:
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _format_authors(authors: list[str]) -> str:
+        """Format author list for HTML display."""
+        if not authors:
+            return ""
+        if len(authors) <= 6:
+            return ", ".join(authors)
+        return ", ".join(authors[:6]) + f" ... (+{len(authors) - 6})"
 
     def _format_summary(self, summary: str) -> str:
         """Format summary for HTML. Converts prose paragraphs to <p> tags."""
@@ -966,10 +984,14 @@ class PDFReportGenerator:
             # Check if this is an abstract-only (non-OA) paper
             is_abstract_only = pp.processing_info.abstract_only and not (paper.is_open_access or paper.pdf_url)
 
+            # Format authors
+            authors_str = self._format_authors(paper.authors)
+
             if is_abstract_only:
                 section = PAPER_SECTION_ABSTRACT_ONLY_TEMPLATE.format(
                     index=i,
                     title=paper.title,
+                    authors=authors_str,
                     journal=paper.journal,
                     pub_date=paper.publication_date.strftime("%Y-%m-%d") if paper.publication_date else "N/A",
                     url=paper.url,
@@ -985,6 +1007,7 @@ class PDFReportGenerator:
                 section = PAPER_SECTION_TEMPLATE.format(
                     index=i,
                     title=paper.title,
+                    authors=authors_str,
                     journal=paper.journal,
                     pub_date=paper.publication_date.strftime("%Y-%m-%d") if paper.publication_date else "N/A",
                     url=paper.url,
