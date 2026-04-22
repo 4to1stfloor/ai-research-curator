@@ -419,7 +419,32 @@
       "doi": "10.1126/sciadv.ady7556",
       "title": "DJ-1 inhibition reshapes tumor microenvironment and potentiates immune checkpoint inhibitors.",
       "added_date": "2026-04-15T04:00:32.594149"
+    },
+    {
+      "doi": "10.7554/eLife.108190",
+      "title": "PTEN restrains SHH medulloblastoma growth through cell autonomous and nonautonomous mechanisms.",
+      "added_date": "2026-04-22T04:07:26.440005"
+    },
+    {
+      "doi": "10.1038/s41467-026-71349-4",
+      "title": "Sequential transcriptional waves and NF-κB-driven chromatin remodeling direct drug-induced dedifferentiation in cancer.",
+      "added_date": "2026-04-22T04:07:26.440077"
+    },
+    {
+      "doi": "10.1126/sciadv.aeb9764",
+      "title": "Mucoadhesive tumor-penetrating nanomedicine for intravesical chemo-immunotherapy against bladder cancer.",
+      "added_date": "2026-04-22T04:07:26.440134"
+    },
+    {
+      "doi": "10.1016/j.molcel.2026.03.016",
+      "title": "Metabolic profiling reveals pyrimidine synthesis enzyme CAD as a central carbon metabolism signaling node in cancer cell proliferation.",
+      "added_date": "2026-04-22T04:07:26.440187"
+    },
+    {
+      "doi": "10.1016/j.cels.2026.101561",
+      "title": "NOT-gated chimeric antigen receptor circuits in T and NK cells.",
+      "added_date": "2026-04-22T04:07:26.440234"
     }
   ],
-  "last_updated": "2026-04-15T04:00:32.594281"
+  "last_updated": "2026-04-22T04:07:26.440442"
 }
