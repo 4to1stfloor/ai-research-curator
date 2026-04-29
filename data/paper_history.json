@@ -444,7 +444,32 @@
       "doi": "10.1016/j.cels.2026.101561",
       "title": "NOT-gated chimeric antigen receptor circuits in T and NK cells.",
       "added_date": "2026-04-22T04:07:26.440234"
+    },
+    {
+      "doi": "10.1371/journal.pcbi.1014143",
+      "title": "PICDGI: A framework for predicting cancer driver genes through dynamic gene-gene interaction modeling of single-cell data.",
+      "added_date": "2026-04-29T04:57:53.267769"
+    },
+    {
+      "doi": "10.1126/science.ads9412",
+      "title": "Mechanical load inhibits cancer growth in mouse and human hearts.",
+      "added_date": "2026-04-29T04:57:53.267821"
+    },
+    {
+      "doi": "10.1371/journal.pcbi.1014253",
+      "title": "CASER: A semi-supervised model with multi-omics data integration prioritizes cancer-associated epigenetic regulator genes",
+      "added_date": "2026-04-29T04:57:53.267862"
+    },
+    {
+      "doi": "10.1371/journal.pgen.1012129",
+      "title": "The <i>pos-1</i> 3′ untranslated region governs germline specification and proliferation to ensure reproductive robustness",
+      "added_date": "2026-04-29T04:57:53.267918"
+    },
+    {
+      "doi": "10.1371/journal.pcbi.1014217",
+      "title": "A multi-omics framework for survival mediation analysis of high-dimensional proteogenomic data",
+      "added_date": "2026-04-29T04:57:53.267969"
     }
   ],
-  "last_updated": "2026-04-22T04:07:26.440442"
+  "last_updated": "2026-04-29T04:57:53.268194"
 }
