@@ -87,11 +87,17 @@ class EmailConfig(BaseModel):
     to_email: Optional[str] = None  # Recipient (defaults to smtp_email if not set)
 
 
+class SlackConfig(BaseModel):
+    """Slack DM notification configuration."""
+    enabled: bool = False
+
+
 class OutputConfig(BaseModel):
     """Output configuration."""
     pdf_report: bool = True
     obsidian: ObsidianConfig = Field(default_factory=ObsidianConfig)
     email: EmailConfig = Field(default_factory=EmailConfig)
+    slack: SlackConfig = Field(default_factory=SlackConfig)
     reports_path: str = "./output/reports"
     output_dir: Optional[str] = None  # Custom base dir for all output
 
@@ -137,6 +143,10 @@ class EnvConfig(BaseSettings):
     # Email (SMTP)
     smtp_email: Optional[str] = Field(default=None, alias="SMTP_EMAIL")
     smtp_password: Optional[str] = Field(default=None, alias="SMTP_PASSWORD")
+
+    # Slack
+    slack_bot_token: Optional[str] = Field(default=None, alias="SLACK_BOT_TOKEN")
+    slack_user_email: Optional[str] = Field(default=None, alias="SLACK_USER_EMAIL")
 
     # Output directory override (from .env, not tracked by git)
     output_dir: Optional[str] = Field(default=None, alias="OUTPUT_DIR")

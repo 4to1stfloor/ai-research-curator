@@ -474,6 +474,67 @@ output:
 
 이후 cron이나 수동 실행 시 HTML 리포트가 첨부파일로 자동 발송됩니다.
 
+## Slack DM 알림 설정
+
+리포트를 본인 Slack DM으로 받을 수 있습니다. **무료 Slack 워크스페이스에서도 동작**하며 API 사용료는 없습니다.
+
+### Step 1: Slack App 생성
+
+1. https://api.slack.com/apps 접속 → **Create New App** 클릭
+2. **From scratch** 선택
+3. App Name: `Paper Digest Bot` (원하는 이름)
+4. Pick a workspace: 본인이 사용 중인 워크스페이스 선택 → **Create App**
+
+### Step 2: Bot Token Scope(권한) 추가
+
+1. 좌측 메뉴 **OAuth & Permissions** 클릭
+2. **Scopes** 섹션 → **Bot Token Scopes** 아래 **Add an OAuth Scope** 클릭
+3. 다음 4개 스코프를 모두 추가:
+   - `chat:write` — 메시지 발송
+   - `files:write` — 파일 업로드
+   - `users:read` — 사용자 검색
+   - `users:read.email` — 이메일로 사용자 검색
+
+### Step 3: 워크스페이스에 설치
+
+1. 같은 페이지 상단 **Install to Workspace** 클릭
+2. 권한 확인 → **Allow** 클릭
+3. 페이지 상단에 **Bot User OAuth Token** 표시 (`xoxb-`로 시작) → **Copy** 클릭
+
+### Step 4: .env에 토큰과 이메일 입력
+
+```env
+SLACK_BOT_TOKEN=xoxb-1234567890-...    # Step 3에서 복사한 토큰
+SLACK_USER_EMAIL=your_email@example.com  # 본인 Slack 가입 이메일
+```
+
+> `SLACK_USER_EMAIL`은 Slack 워크스페이스에 등록된 본인의 이메일이어야 합니다. Bot이 이 이메일로 본인 계정을 찾고 DM을 엽니다.
+
+### Step 5: config.yaml에서 Slack 활성화
+
+```yaml
+output:
+  slack:
+    enabled: true
+```
+
+### Step 6: 테스트
+
+```bash
+python -m src.main --max-papers 1
+```
+
+실행 완료 시 본인 Slack DM에 HTML 첨부 메시지가 도착합니다.
+
+### Slack 알림 트러블슈팅
+
+| 에러 메시지 | 원인 | 해결 |
+|---|---|---|
+| `users_not_found` | `SLACK_USER_EMAIL`이 워크스페이스에 없음 | 본인 Slack 등록 이메일 확인 |
+| `missing_scope` | Bot Token 권한 부족 | Step 2의 4개 스코프 모두 추가했는지 확인 후 재설치 |
+| `invalid_auth` | Bot Token 잘못됨 | Token 다시 복사. `xoxb-`로 시작하는지 확인 |
+| `not_in_channel` | Bot이 채널에 없음 | DM은 자동으로 채널 생성됨 — 다른 에러일 가능성 |
+
 ## FAQ
 
 ### Q: PDF/Figure가 다운로드 안됩니다

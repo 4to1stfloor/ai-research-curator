@@ -718,6 +718,25 @@ flowchart TD
             except Exception as e:
                 console.print(f"[yellow]Email failed: {e}[/yellow]")
 
+        # Send Slack DM
+        if self.config.output.slack.enabled and result.get("html"):
+            console.print("[cyan]Sending Slack DM...[/cyan]")
+            try:
+                from .output.slack_sender import SlackSender
+                bot_token = self.env_config.slack_bot_token
+                user_email = self.env_config.slack_user_email
+                if bot_token and user_email:
+                    slack = SlackSender(bot_token, user_email)
+                    slack.send_report(
+                        html_path=Path(result["html"]),
+                        paper_count=len(processed_papers),
+                        date_str=datetime.now().strftime("%Y-%m-%d"),
+                    )
+                else:
+                    console.print("[yellow]Slack: SLACK_BOT_TOKEN / SLACK_USER_EMAIL not set in .env[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Slack failed: {e}[/yellow]")
+
         # Generate Obsidian notes
         if self.obsidian_exporter:
             console.print("[cyan]Exporting to Obsidian...[/cyan]")

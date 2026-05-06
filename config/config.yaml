@@ -180,6 +180,11 @@ output:
     enabled: false
     # to_email: your@gmail.com  # 미설정 시 SMTP_EMAIL로 자신에게 발송
 
+  # Slack DM 발송 설정 (무료 - Slack 워크스페이스만 있으면 됨)
+  # .env에 SLACK_BOT_TOKEN, SLACK_USER_EMAIL 설정 필요
+  slack:
+    enabled: false
+
   # PDF 리포트 출력 경로
   reports_path: ./output/reports
 
