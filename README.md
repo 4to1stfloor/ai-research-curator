@@ -85,7 +85,7 @@ curl -fsSL https://raw.githubusercontent.com/4to1stfloor/ai-research-curator/mai
 2. Python 패키지 설치
 3. AI 백엔드 자동 감지 (Claude CLI → API Key → Ollama)
 4. PubMed 이메일 설정
-5. 실행 방식 선택 (crontab 자동 / GitHub Actions / 수동)
+5. 실행 방식 선택 (crontab 자동 / 수동)
 
 이미 설치된 경우 같은 명령어로 업데이트됩니다.
 
@@ -320,44 +320,6 @@ bash scripts/setup_cron.sh remove
 > **crontab 해제**: 자동 실행을 중지하려면 `bash scripts/setup_cron.sh remove`를 실행하세요.
 > curl로 설치한 경우: `cd ~/.ai-research-curator && bash scripts/setup_cron.sh remove`
 
-### GitHub Actions (서버 없이 자동 실행)
-
-GitHub Actions를 사용하면 **내 컴퓨터를 켜지 않아도** 매주 자동으로 논문을 수집합니다.
-
-#### Step 1: 저장소 Fork
-
-1. 이 저장소 페이지에서 우측 상단 **"Fork"** 버튼 클릭
-2. 내 GitHub 계정에 복사됨
-
-#### Step 2: Secrets 설정 (API 키 등록)
-
-1. Fork한 저장소로 이동
-2. **Settings** → **Secrets and variables** → **Actions**
-3. **"New repository secret"** 클릭 후 아래 키 추가:
-
-| Name | 설명 | 필수 |
-|------|------|------|
-| `PUBMED_EMAIL` | 내 이메일 주소 | **필수** |
-| `GOOGLE_API_KEY` | Gemini API 키 (요약용) | 필수 |
-| `ANTHROPIC_API_KEY` | Claude API 키 | 선택 |
-| `OPENAI_API_KEY` | OpenAI API 키 | 선택 |
-
-#### Step 3: Actions 활성화
-
-1. **Actions** 탭 → **"I understand my workflows, go ahead and enable them"** 클릭
-
-#### Step 4: 실행
-
-- **자동**: 매주 수요일 오전 9시(한국시간)
-- **수동**: Actions 탭 → **"Paper Digest"** → **"Run workflow"**
-
-#### Step 5: 결과 다운로드
-
-실행 완료 후 **Artifacts**에서 다운로드:
-- `paper-digest-html` - HTML 보고서
-- `paper-digest-report` - PDF 보고서
-- `obsidian-notes` - Obsidian 노트
-
 ## Figure 추출 방식
 
 논문에서 Figure를 자동으로 추출합니다:
@@ -425,10 +387,9 @@ ai-research-curator/
 │   └── run_cron.sh           # Cron 실행 스크립트
 ├── data/
 │   └── paper_history.json    # 처리된 논문 이력
-├── output/
-│   ├── reports/              # HTML/PDF 리포트
-│   └── obsidian/             # Obsidian 마크다운
-└── .github/workflows/        # GitHub Actions
+└── output/
+    ├── reports/              # HTML/PDF 리포트
+    └── obsidian/             # Obsidian 마크다운
 ```
 
 ## 지원 저널
@@ -592,9 +553,6 @@ ai:
 
 ### Q: Obsidian 연동은 어떻게 하나요?
 A: `output/obsidian` 폴더를 Obsidian vault에 복사하거나, `config.yaml`에서 vault_path를 직접 지정하세요.
-
-### Q: GitHub Actions가 실패합니다
-A: Repository Secrets에 `PUBMED_EMAIL`이 설정되어 있는지 확인하세요. 이 값은 필수입니다.
 
 ### Q: crontab 자동 실행을 해제하고 싶습니다
 A: 아래 명령어로 해제할 수 있습니다:
