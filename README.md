@@ -496,6 +496,17 @@ output:
    - `users:read.email` — 이메일로 사용자 검색
    - `im:write` — DM 채널 열기
 
+### Step 2.5: App Home에서 Bot User 활성화 (필수)
+
+스코프만 추가하면 설치 시 "이 앱은 봇으로 구성되어 있지 않습니다" 에러가 납니다. 봇 사용자를 명시적으로 만들어야 합니다.
+
+1. 좌측 메뉴 **Features** 아래 **App Home** 클릭
+2. **Your App's Presence in Slack** 섹션 → **App Display Name** 옆 **Edit** 클릭
+3. 다음 입력 후 **Save**:
+   - **Display Name (Bot Name)**: `Paper Digest Bot` (원하는 이름)
+   - **Default Username**: `paper_digest` (소문자, 공백 없이)
+4. 같은 페이지 **Always Show My Bot as Online** 스위치 → **On**
+
 ### Step 3: 워크스페이스에 설치
 
 1. 같은 페이지 상단 **Install to Workspace** 클릭
