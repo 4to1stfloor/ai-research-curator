@@ -489,11 +489,12 @@ output:
 
 1. 좌측 메뉴 **OAuth & Permissions** 클릭
 2. **Scopes** 섹션 → **Bot Token Scopes** 아래 **Add an OAuth Scope** 클릭
-3. 다음 4개 스코프를 모두 추가:
+3. 다음 5개 스코프를 모두 추가:
    - `chat:write` — 메시지 발송
    - `files:write` — 파일 업로드
    - `users:read` — 사용자 검색
    - `users:read.email` — 이메일로 사용자 검색
+   - `im:write` — DM 채널 열기
 
 ### Step 3: 워크스페이스에 설치
 

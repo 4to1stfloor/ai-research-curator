@@ -111,7 +111,7 @@ class SlackSender:
             if "users_not_found" in err_msg:
                 print("[Slack] Email not found in Slack workspace. Check SLACK_USER_EMAIL.")
             elif "missing_scope" in err_msg:
-                print("[Slack] Bot token missing scopes. Required: chat:write, files:write, users:read, users:read.email")
+                print("[Slack] Bot token missing scopes. Required: chat:write, files:write, users:read, users:read.email, im:write")
             elif "invalid_auth" in err_msg:
                 print("[Slack] Invalid bot token. Check SLACK_BOT_TOKEN.")
             return False
