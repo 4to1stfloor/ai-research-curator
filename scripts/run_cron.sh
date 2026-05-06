@@ -28,6 +28,7 @@ fi
 # Pull latest code from GitHub (stash local data changes first)
 cd "${SCRIPT_DIR}"
 echo "[Update] git pull..." >> "${LOG_FILE}"
+OLD_HEAD=$(git rev-parse HEAD 2>/dev/null)
 STASHED=false
 if ! git diff --quiet HEAD -- data/ 2>/dev/null; then
     git stash push -m "cron-auto-stash" -- data/ >> "${LOG_FILE}" 2>&1 && STASHED=true
@@ -40,6 +41,16 @@ if [ "${STASHED}" = true ]; then
         git checkout --theirs data/ >> "${LOG_FILE}" 2>&1
         git stash drop >> "${LOG_FILE}" 2>&1
     }
+fi
+
+# Save new commits since previous run for changelog display in HTML report
+NEW_HEAD=$(git rev-parse HEAD 2>/dev/null)
+mkdir -p "${SCRIPT_DIR}/data"
+PENDING_FILE="${SCRIPT_DIR}/data/pending_changelog.txt"
+if [ -n "${OLD_HEAD}" ] && [ "${OLD_HEAD}" != "${NEW_HEAD}" ]; then
+    git log --pretty=format:"%h|%s" "${OLD_HEAD}..${NEW_HEAD}" > "${PENDING_FILE}" 2>/dev/null
+    NEW_COMMITS=$(wc -l < "${PENDING_FILE}")
+    echo "[Update] ${NEW_COMMITS} new commits saved to changelog" >> "${LOG_FILE}"
 fi
 
 # Setup venv if not exists, then activate

@@ -478,6 +478,12 @@ output:
 
 리포트를 본인 Slack DM으로 받을 수 있습니다. **무료 Slack 워크스페이스에서도 동작**하며 API 사용료는 없습니다.
 
+> **같은 워크스페이스에 누군가 이미 앱을 만들어둔 경우**:
+> 앱을 새로 만들 필요 없이, 그 사람에게 Bot Token(`xoxb-...`)만 받으세요.
+> 그 후 [Step 4](#step-4-env에-토큰과-이메일-입력)부터 진행하면 됩니다.
+> Bot Token은 워크스페이스 단위로 발급되므로 한 앱을 여러 사용자가 공유 가능합니다.
+> (각자 본인 이메일을 `SLACK_USER_EMAIL`로 설정하면 본인 DM으로 옵니다.)
+
 ### Step 1: Slack App 생성
 
 1. https://api.slack.com/apps 접속 → **Create New App** 클릭
@@ -546,6 +552,16 @@ python -m src.main --max-papers 1
 | `missing_scope` | Bot Token 권한 부족 | Step 2의 4개 스코프 모두 추가했는지 확인 후 재설치 |
 | `invalid_auth` | Bot Token 잘못됨 | Token 다시 복사. `xoxb-`로 시작하는지 확인 |
 | `not_in_channel` | Bot이 채널에 없음 | DM은 자동으로 채널 생성됨 — 다른 에러일 가능성 |
+
+## 자동 업데이트 알림
+
+cron이 매주 실행될 때 자동으로 `git pull`을 받아 최신 버전으로 동작합니다.
+새 버전이 받아진 경우, 이번 회 리포트에 한해 추가 섹션이 표시됩니다:
+
+- **HTML 리포트**: 최상단에 노란 박스로 **"최근 업데이트"** 섹션 (변경사항이 있을 때만)
+- **Slack DM**: 본문 하단에 :sparkles: 최근 업데이트 항목 추가
+
+변경사항은 Claude가 git commit 메시지를 사용자 친화적인 한국어로 자동 요약합니다. 한 번 표시되면 다음 회부터는 사라집니다(또 새 업데이트가 받아질 때까지).
 
 ## FAQ
 

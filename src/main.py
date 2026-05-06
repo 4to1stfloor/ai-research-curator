@@ -665,6 +665,30 @@ flowchart TD
 
         return explanations
 
+    def _build_changelog(self) -> Optional[str]:
+        """Build user-friendly changelog from pending commits saved by run_cron.sh."""
+        from .ai.changelog_humanizer import (
+            ChangelogHumanizer,
+            load_pending_changelog,
+            consume_pending_changelog,
+        )
+
+        pending_file = resolve_path("data/pending_changelog.txt", self.base_dir)
+        commits = load_pending_changelog(pending_file)
+        if not commits:
+            return None
+
+        try:
+            humanizer = ChangelogHumanizer(self.llm_client)
+            changelog = humanizer.humanize(commits)
+        except Exception as e:
+            console.print(f"[yellow]Changelog humanize failed: {e}[/yellow]")
+            changelog = None
+
+        # Always consume so we don't repeat the same changelog next run
+        consume_pending_changelog(pending_file)
+        return changelog
+
     def generate_output(
         self,
         processed_papers: list[ProcessedPaper],
@@ -674,11 +698,18 @@ flowchart TD
         """Generate output files (PDF, HTML, Obsidian)."""
         result = {}
 
+        # Build changelog from pending commits (cron writes data/pending_changelog.txt)
+        changelog = self._build_changelog()
+        if changelog:
+            console.print("[cyan]최근 업데이트:[/cyan]")
+            console.print(changelog)
+
         # Generate HTML (always, as fallback for PDF)
         console.print("[cyan]Generating HTML report...[/cyan]")
         try:
             html_path = self.pdf_generator.generate_html_file(
-                processed_papers, figure_explanations, diagrams
+                processed_papers, figure_explanations, diagrams,
+                changelog=changelog,
             )
             result["html"] = html_path
             console.print(f"[green]HTML: {html_path}[/green]")
@@ -690,7 +721,8 @@ flowchart TD
             console.print("[cyan]Generating PDF report...[/cyan]")
             try:
                 pdf_path = self.pdf_generator.generate_pdf(
-                    processed_papers, figure_explanations, diagrams
+                    processed_papers, figure_explanations, diagrams,
+                    changelog=changelog,
                 )
                 result["pdf"] = pdf_path
                 console.print(f"[green]PDF: {pdf_path}[/green]")
@@ -731,6 +763,7 @@ flowchart TD
                         html_path=Path(result["html"]),
                         paper_count=len(processed_papers),
                         date_str=datetime.now().strftime("%Y-%m-%d"),
+                        changelog=changelog,
                     )
                 else:
                     console.print("[yellow]Slack: SLACK_BOT_TOKEN / SLACK_USER_EMAIL not set in .env[/yellow]")

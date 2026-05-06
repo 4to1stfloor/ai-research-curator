@@ -84,6 +84,7 @@ class SlackSender:
         html_path: Path,
         paper_count: int,
         date_str: str,
+        changelog: Optional[str] = None,
     ) -> bool:
         """Send HTML report as DM to user.
 
@@ -91,6 +92,7 @@ class SlackSender:
             html_path: Path to HTML report
             paper_count: Number of papers
             date_str: Report date (e.g., "2026-04-15")
+            changelog: Optional markdown bullets describing recent updates.
 
         Returns:
             True on success, False on failure.
@@ -101,7 +103,19 @@ class SlackSender:
 
         try:
             channel_id = self._get_dm_channel()
-            comment = f":book: *Paper Digest - {date_str}*\n논문 {paper_count}편 분석 완료. 첨부된 HTML을 다운로드하여 브라우저에서 열어 확인하세요."
+            comment_lines = [
+                f":book: *Paper Digest - {date_str}*",
+                f"논문 {paper_count}편 분석 완료. 첨부된 HTML을 다운로드하여 브라우저에서 열어 확인하세요.",
+            ]
+            if changelog and changelog.strip():
+                comment_lines.append("")
+                comment_lines.append(":sparkles: *최근 업데이트*")
+                # Slack uses • for bullets visually but - works fine in mrkdwn
+                for line in changelog.strip().split("\n"):
+                    line = line.strip()
+                    if line.startswith("- "):
+                        comment_lines.append(f"• {line[2:].strip()}")
+            comment = "\n".join(comment_lines)
             self._upload_file(html_path, channel_id, comment)
             print(f"[Slack] DM sent to {self.user_email}")
             return True

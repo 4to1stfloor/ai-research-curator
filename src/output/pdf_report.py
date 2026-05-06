@@ -109,6 +109,37 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             font-weight: 600;
         }}
 
+        /* Changelog (shown only when updates exist) */
+        .changelog {{
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-left: 4px solid #f59e0b;
+            padding: 1.25rem 1.5rem;
+            border-radius: 0.75rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow);
+        }}
+
+        .changelog-title {{
+            font-size: 1rem;
+            font-weight: 700;
+            color: #92400e;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }}
+
+        .changelog-list {{
+            margin: 0;
+            padding-left: 1.25rem;
+            color: #78350f;
+            line-height: 1.7;
+        }}
+
+        .changelog-list li {{
+            margin: 0.25rem 0;
+        }}
+
         /* Table of Contents */
         .toc {{
             background: var(--bg-card);
@@ -549,6 +580,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </header>
 
+        {changelog_section}
+
         <nav class="toc">
             <h2 class="toc-title">Table of Contents</h2>
             <div class="toc-list">
@@ -944,7 +977,8 @@ class PDFReportGenerator:
         self,
         processed_papers: list[ProcessedPaper],
         figure_explanations: Optional[dict] = None,
-        diagrams: Optional[dict] = None
+        diagrams: Optional[dict] = None,
+        changelog: Optional[str] = None,
     ) -> str:
         """
         Generate HTML report.
@@ -953,6 +987,7 @@ class PDFReportGenerator:
             processed_papers: List of processed papers
             figure_explanations: Optional dict of {paper_id: figure_explanation}
             diagrams: Optional dict of {paper_id: mermaid_diagram}
+            changelog: Optional changelog markdown (bullets) for "최근 업데이트" section.
 
         Returns:
             HTML string
@@ -1020,22 +1055,58 @@ class PDFReportGenerator:
                 )
             paper_sections.append(section)
 
+        # Format changelog section (only if provided and non-empty)
+        changelog_section = self._format_changelog(changelog)
+
         # Generate full HTML
         html = HTML_TEMPLATE.format(
             date=date_str,
             paper_count=len(processed_papers),
+            changelog_section=changelog_section,
             toc_items='\n'.join(toc_items),
             paper_sections='\n'.join(paper_sections)
         )
 
         return html
 
+    @staticmethod
+    def _format_changelog(changelog: Optional[str]) -> str:
+        """Format changelog markdown bullets into HTML section. Returns empty string if no content."""
+        if not changelog or not changelog.strip():
+            return ""
+
+        items = []
+        for line in changelog.strip().split("\n"):
+            line = line.strip()
+            if line.startswith("- "):
+                content = line[2:].strip()
+                if content:
+                    items.append(f"<li>{content}</li>")
+
+        if not items:
+            return ""
+
+        return f'''
+        <section class="changelog">
+            <h2 class="changelog-title">
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/>
+                </svg>
+                최근 업데이트
+            </h2>
+            <ul class="changelog-list">
+                {''.join(items)}
+            </ul>
+        </section>
+        '''
+
     def generate_pdf(
         self,
         processed_papers: list[ProcessedPaper],
         figure_explanations: Optional[dict] = None,
         diagrams: Optional[dict] = None,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
+        changelog: Optional[str] = None,
     ) -> str:
         """
         Generate PDF report.
@@ -1045,6 +1116,7 @@ class PDFReportGenerator:
             figure_explanations: Optional dict of {paper_id: figure_explanation}
             diagrams: Optional dict of {paper_id: mermaid_diagram}
             filename: Optional filename (default: paper_digest_YYYYMMDD.pdf)
+            changelog: Optional changelog markdown bullets.
 
         Returns:
             Path to generated PDF
@@ -1052,7 +1124,7 @@ class PDFReportGenerator:
         from weasyprint import HTML
 
         # Generate HTML
-        html_content = self.generate_html(processed_papers, figure_explanations, diagrams)
+        html_content = self.generate_html(processed_papers, figure_explanations, diagrams, changelog=changelog)
 
         # Generate filename
         if not filename:
@@ -1072,7 +1144,8 @@ class PDFReportGenerator:
         processed_papers: list[ProcessedPaper],
         figure_explanations: Optional[dict] = None,
         diagrams: Optional[dict] = None,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
+        changelog: Optional[str] = None,
     ) -> str:
         """
         Generate HTML file.
@@ -1082,11 +1155,12 @@ class PDFReportGenerator:
             figure_explanations: Optional dict of {paper_id: figure_explanation}
             diagrams: Optional dict of {paper_id: mermaid_diagram}
             filename: Optional filename
+            changelog: Optional changelog markdown bullets.
 
         Returns:
             Path to generated HTML
         """
-        html_content = self.generate_html(processed_papers, figure_explanations, diagrams)
+        html_content = self.generate_html(processed_papers, figure_explanations, diagrams, changelog=changelog)
 
         if not filename:
             date_str = datetime.now().strftime("%Y%m%d")

@@ -146,6 +146,58 @@ else
 fi
 
 # ============================================================================
+# Step 4.5: Slack DM notification (optional)
+# ============================================================================
+echo ""
+echo -e "${CYAN}━━━ Slack DM 알림 설정 (선택) ━━━${NC}"
+echo ""
+echo "  리포트가 생성될 때마다 본인 Slack DM으로 받을 수 있습니다."
+echo "  사용하지 않으려면 그냥 엔터로 넘어가세요."
+echo ""
+echo "  처음 설치하는 경우:"
+echo "    1) https://api.slack.com/apps 에서 'Create New App' → 'From scratch'"
+echo "    2) OAuth & Permissions에서 다음 5개 스코프 추가:"
+echo "       chat:write, files:write, users:read, users:read.email, im:write"
+echo "    3) App Home에서 Bot User Display Name/Username 설정"
+echo "    4) Install to Workspace → Bot User OAuth Token (xoxb-...) 복사"
+echo ""
+echo "  같은 워크스페이스에 누군가 이미 만들어둔 경우:"
+echo "    → 그 사람에게 Bot Token만 받으면 됨 (앱 생성 단계 스킵)"
+echo ""
+echo "  자세한 가이드: README.md의 'Slack DM 알림 설정' 섹션 참조"
+echo ""
+
+if [ -f "${ENV_FILE}" ] && grep -q "SLACK_BOT_TOKEN" "${ENV_FILE}"; then
+    echo -e "  ${GREEN}✓${NC} 이미 설정됨"
+else
+    read -p "  Slack Bot Token (xoxb-... / 미사용시 엔터): " SLACK_TOKEN
+    if [ -n "${SLACK_TOKEN}" ]; then
+        read -p "  본인 Slack 가입 이메일: " SLACK_EMAIL
+        if [ -n "${SLACK_EMAIL}" ]; then
+            echo "SLACK_BOT_TOKEN=${SLACK_TOKEN}" >> "${ENV_FILE}"
+            echo "SLACK_USER_EMAIL=${SLACK_EMAIL}" >> "${ENV_FILE}"
+            # Enable in config.yaml
+            CONFIG_FILE="${SCRIPT_DIR}/config/config.yaml"
+            if [ -f "${CONFIG_FILE}" ]; then
+                # Match the slack: block and flip enabled: false → true
+                python3 -c "
+import re
+p = '${CONFIG_FILE}'
+with open(p) as f: t = f.read()
+t = re.sub(r'(slack:\s*\n\s*)enabled:\s*false', r'\1enabled: true', t)
+with open(p, 'w') as f: f.write(t)
+"
+            fi
+            echo -e "  ${GREEN}✓${NC} .env 저장 + config.yaml에서 slack 활성화"
+        else
+            echo -e "  ${YELLOW}!${NC} 이메일 미입력 → Slack 비활성"
+        fi
+    else
+        echo -e "  ${YELLOW}-${NC} Slack 알림 사용 안함 (나중에 README 참고하여 설정 가능)"
+    fi
+fi
+
+# ============================================================================
 # Step 5: Output directory
 # ============================================================================
 echo ""
