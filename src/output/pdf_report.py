@@ -462,6 +462,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             margin-bottom: 0.5rem;
         }}
 
+        .figure-legend-translation {{
+            background: rgba(255, 255, 255, 0.55);
+            border-left: 3px solid var(--accent);
+            color: var(--text-primary);
+            margin: 0 0 0.5rem 1rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0 0.4rem 0.4rem 0;
+            line-height: 1.65;
+            font-size: 0.92rem;
+        }}
+
+        .figure-legend-translation strong {{
+            color: var(--primary-dark);
+        }}
+
         .figure-block-detail {{
             color: var(--text-secondary);
             margin-left: 1rem;
@@ -874,25 +889,42 @@ class PDFReportGenerator:
             fig_label = parts[i].strip()  # e.g. "Figure 1"
             content = parts[i + 1].strip()
 
-            # Parse content into 핵심 내용 and 세부 설명
+            # Parse content into 원문 해석, 핵심 내용, 세부 설명
+            legend_match = re.search(r'\*{0,2}원문\s*해석\*{0,2}\s*[:：]\s*', content)
             key_match = re.search(r'\*{0,2}핵심\s*내용\*{0,2}\s*[:：]\s*', content)
             detail_match = re.search(r'\*{0,2}세부\s*설명\*{0,2}\s*[:：]\s*', content)
 
             fig_title = ""
+            legend_content = ""
             key_content = ""
             detail_content = ""
 
-            if key_match:
-                fig_title = content[:key_match.start()].strip()
-                if detail_match:
-                    key_content = content[key_match.end():detail_match.start()].strip()
-                    detail_content = content[detail_match.end():].strip()
-                else:
-                    key_content = content[key_match.end():].strip()
+            # Determine fig_title: text before the first present field marker
+            first_marker_pos = min(
+                (m.start() for m in (legend_match, key_match, detail_match) if m),
+                default=None,
+            )
+            if first_marker_pos is not None:
+                fig_title = content[:first_marker_pos].strip()
             else:
-                # No structured format, use all content as description
                 fig_title = content.split('\n')[0] if '\n' in content else ""
                 detail_content = content if not fig_title else content[len(fig_title):].strip()
+
+            # Extract each section's content (up to the next marker)
+            def _slice(start_match, *next_matches):
+                if not start_match:
+                    return ""
+                ends = [m.start() for m in next_matches if m and m.start() > start_match.end()]
+                end = min(ends) if ends else len(content)
+                return content[start_match.end():end].strip()
+
+            legend_content = _slice(legend_match, key_match, detail_match)
+            key_content = _slice(key_match, detail_match)
+            detail_content = _slice(detail_match) or detail_content
+
+            # Skip placeholder if humanizer wrote "(원문 legend 없음)" or similar
+            if legend_content and re.fullmatch(r'\(?\s*원문\s*legend\s*없음\s*\)?\.?', legend_content):
+                legend_content = ""
 
             # Build HTML block
             title_text = f"{fig_label}"
@@ -901,6 +933,9 @@ class PDFReportGenerator:
 
             block = f'<div class="figure-block">\n'
             block += f'  <div class="figure-block-title">{title_text}</div>\n'
+
+            if legend_content:
+                block += f'  <div class="figure-legend-translation"><strong>원문 해석</strong>: {legend_content}</div>\n'
 
             if key_content:
                 block += f'  <div class="figure-block-detail"><strong>핵심 내용</strong>: {key_content}</div>\n'

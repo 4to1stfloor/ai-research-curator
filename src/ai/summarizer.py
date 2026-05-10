@@ -502,6 +502,7 @@ FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
 ## 예시 Figure 해설 (이 스타일을 정확히 따라주세요):
 
 #### Figure 1: Spatially resolved transcriptomics workflow
+**원문 해석**: stACN의 spatially resolved transcriptomics 데이터 분석을 위한 전체 workflow를 나타낸 모식도. (A) Input data 처리 단계에서 spatial gene expression matrix와 좌표 정보가 모델에 입력된다. (B) Graph noise model이 cell-cell 관계 정보를 학습하여 dual cell network을 구성한다. (C) Joint tensor decomposition을 통해 denoised expression과 spatial domain identification 결과가 출력된다.
 **핵심 내용**: Spatially resolved transcriptomics 실험 workflow와 stACN model의 구조를 보여준다.
 **세부 설명**:
 - Panel A: stACN model의 전체 workflow. Input으로 SRT data를 받아 denoising과 spatial domain identification을 수행한다.
@@ -509,6 +510,7 @@ FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
 - Panel C: Joint tensor decomposition을 통한 cell feature 추출.
 
 #### Figure 2: Spatial domain identification 결과
+**원문 해석**: DLPFC 데이터셋에서 stACN과 기존 방법(BayesSpace, SpaGCN, STAGATE 등)의 spatial domain identification 성능을 비교한 결과. (A) 각 방법의 spatial domain 예측 결과를 ground truth annotation과 시각적으로 비교한 image. (B) 모든 슬라이스에 대한 Adjusted Rand Index (ARI) score의 boxplot으로 stACN이 모든 데이터셋에서 가장 높은 ARI score를 기록하였다.
 **핵심 내용**: stACN model의 spatial domain identification 결과를 기존 방법과 비교한다.
 **세부 설명**:
 - Panel A: Ground truth annotation과 stACN 결과 비교. Spatial domain이 정확하게 식별되었다.
@@ -541,8 +543,13 @@ FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
    - "Figure 파일이 아직 추출되지 않은 것 같습니다" (X)
    - "PDF에서 직접 Figure 내용을 확인했으므로" (X)
    금지! 바로 Figure 설명만 출력하세요.
+4. **원문 해석** 필드는 위에 주어진 Figure Legend 원문을 한국어로 자연스럽게 번역/해석한 내용입니다.
+   - Legend 원문에 있는 정보만 사용하세요. 새로운 정보를 추가하거나 추측하지 마세요.
+   - 전문 용어는 영어 그대로 유지하면서 한국어 문장으로 풀어 쓰세요.
+   - Legend가 없거나 부족하면 "(원문 legend 없음)"으로만 표기하고 절대 추측해서 채우지 마세요.
+5. 각 Figure 항목은 반드시 **원문 해석** → **핵심 내용** → **세부 설명** 순서를 지키세요.
 
-위 예시처럼 전문 용어를 영어로 유지하면서 Figure를 순서대로 설명해주세요.
+위 예시처럼 세 필드를 순서대로 채워 Figure를 순서대로 설명해주세요.
 """
 
 
