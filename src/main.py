@@ -295,7 +295,14 @@ class PaperDigestPipeline:
             "Published Erratum", "Retracted Publication", "Biography",
             "Historical Article", "Interview", "Lecture", "Guideline",
             "Perspective", "Commentary", "Opinion", "Correspondence",
-            "Correction", "Retraction", "Primer", "Viewpoint"
+            "Correction", "Retraction", "Primer", "Viewpoint",
+            # Publisher-specific labels (Nature/Cell/Science)
+            "Brief Communication", "BriefCommunication",
+            "News & Views", "NewsAndViews", "News and Views",
+            "Research Highlight", "ResearchHighlight",
+            "Q&A", "QandA", "Outlook", "Matter Arising", "MatterArising",
+            "Resource",  # Nature uses this for tools/datasets, not primary research
+            "Erratum",
         ]
         research_papers = []
         filtered_count = 0
@@ -313,6 +320,32 @@ class PaperDigestPipeline:
         if filtered_count > 0:
             console.print(f"[yellow]Filtered out {filtered_count} non-research articles (Review, Perspective, etc.)[/yellow]")
         unique_papers = research_papers
+
+        # Publisher-specific article type check (Nature uses dc.type meta tag)
+        # PubMed often labels Nature's Comment/Brief Communication as just "Journal Article",
+        # so we fetch the publisher page to detect the real type.
+        from .search.article_type_checker import (
+            detect_publisher_article_type,
+            is_non_research_type,
+        )
+
+        verified = []
+        publisher_filtered = 0
+        for p in unique_papers:
+            if p.doi and "10.1038/" in p.doi:
+                pub_type = detect_publisher_article_type(p.doi, p.url)
+                if pub_type:
+                    if is_non_research_type(pub_type):
+                        publisher_filtered += 1
+                        console.print(f"[yellow]Excluded ({pub_type}): {p.title[:60]}...[/yellow]")
+                        continue
+                    # Update article_type with publisher's label for accuracy
+                    p.article_type = pub_type
+            verified.append(p)
+
+        if publisher_filtered > 0:
+            console.print(f"[yellow]Filtered out {publisher_filtered} non-research articles via publisher metadata[/yellow]")
+        unique_papers = verified
 
         # Filter open access only (unless include_abstract_only is enabled)
         max_papers = self.config.search.max_papers
