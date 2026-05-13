@@ -132,13 +132,26 @@ class FigureFetcher:
                         continue
                     seen_urls.add(img_src)
 
-                    # Get figure caption
-                    caption_elem = fig_elem.find(['figcaption', 'div'], class_=re.compile(r'caption|fig-caption'))
-                    caption = caption_elem.get_text(strip=True) if caption_elem else ""
+                    # Get figure title (e.g., "Fig. 1. PARP2 expression in ...")
+                    title_elem = fig_elem.find(['h4', 'h5', 'h3'], class_=re.compile(r'obj_head|fig.?head|label'))
+                    title_text = title_elem.get_text(strip=True) if title_elem else ""
 
-                    # Extract figure number
+                    # Get figure caption — try multiple PMC layouts:
+                    # 1. <figcaption> with no class (current PMC structure)
+                    # 2. <figcaption> or <div> with class "caption"
+                    # 3. Old PMC structure with <div class="fig-caption">
+                    caption_elem = fig_elem.find('figcaption')
+                    if not caption_elem:
+                        caption_elem = fig_elem.find(['div', 'section'], class_=re.compile(r'caption|fig-caption|description'))
+                    caption_body = caption_elem.get_text(separator=' ', strip=True) if caption_elem else ""
+
+                    # Combine title and description for full legend
+                    caption_parts = [p for p in (title_text, caption_body) if p]
+                    caption = " ".join(caption_parts)
+
+                    # Extract figure number from title first, then caption/element
                     fig_num = str(i)
-                    fig_match = re.search(r'[Ff]ig(?:ure)?\.?\s*(\d+[A-Za-z]?)', caption or str(fig_elem))
+                    fig_match = re.search(r'[Ff]ig(?:ure)?\.?\s*(\d+[A-Za-z]?)', title_text or caption or str(fig_elem))
                     if fig_match:
                         fig_num = fig_match.group(1)
 
@@ -156,7 +169,7 @@ class FigureFetcher:
                         figures.append({
                             "figure_num": fig_num,
                             "path": str(filepath),
-                            "caption": caption[:500],
+                            "caption": caption[:3000],
                             "url": img_src
                         })
                         print(f"[PMC] Downloaded Figure {fig_num}")
@@ -250,7 +263,7 @@ class FigureFetcher:
                             figures.append({
                                 "figure_num": fig_num,
                                 "path": str(filepath),
-                                "caption": caption[:500],
+                                "caption": caption[:3000],
                                 "url": img_src
                             })
                             print(f"[bioRxiv] Downloaded Figure {fig_num}")
@@ -384,7 +397,7 @@ class FigureFetcher:
                         figures.append({
                             "figure_num": fig_num,
                             "path": str(filepath),
-                            "caption": caption[:500],
+                            "caption": caption[:3000],
                             "url": img_src
                         })
                         print(f"[DOI] Downloaded Figure {fig_num}")
@@ -820,7 +833,7 @@ class PaperContentFetcher:
                         figures.append({
                             "figure_num": fig_num,
                             "path": str(filepath),
-                            "caption": caption[:500],
+                            "caption": caption[:3000],
                             "url": img_src_large
                         })
                         print(f"[PLOS] Downloaded Figure {fig_num}")
