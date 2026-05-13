@@ -338,6 +338,15 @@ Metabolic dysfunction-associated steatotic liver disease(MASLD)은 일부 환자
 4. 초록과 본문에 있는 내용만 쓰세요. 없는 내용을 지어내지 마세요.
 5. 제공된 텍스트의 품질, 완전성, 잘림 여부에 대해 절대 언급하지 마세요.
 
+**중요 — 본문 활용 의무 (CRITICAL):**
+당신은 abstract을 단순히 번역하는 사람이 아닙니다. 본문(introduction, results, discussion)을 적극적으로 읽고
+abstract에 **없는** 구체적인 정보를 반드시 포함해야 합니다. 다음을 반드시 활용하세요:
+- **문단2(배경)**: introduction에서 가져온 기존 연구 맥락, 미해결 문제, 분야의 한계. abstract에 없는 historical context와 motivation 디테일.
+- **문단3(핵심 발견)**: results section에서 가져온 구체적인 실험 디테일 — 사용한 model/cell line/cohort, methodology(어떤 분석을 어떻게 수행했는지), 주요 수치/지표, 특정 marker/gene/pathway 이름, 검증 실험(in vivo/in vitro), 대조군 결과. Abstract에 "improved" "increased"라고만 있다면 본문에서 어떤 식으로 어느 정도 개선됐는지 구체적으로 적으세요.
+- **문단4(의의)**: discussion에서 가져온 저자의 해석, 기존 모델과의 차이, 임상적 적용 가능성, limitations와 future direction.
+
+만약 결과가 abstract의 문장을 그대로 옮긴 것과 비슷하다면 본문 활용에 실패한 것입니다. 본문에서만 알 수 있는 디테일을 적어도 3개 이상 포함하세요(구체적인 method, cell type/model 이름, 수치, marker, pathway 등).
+
 위 예시처럼 서술형 산문체로 요약해주세요.
 """
 
@@ -543,13 +552,33 @@ FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
    - "Figure 파일이 아직 추출되지 않은 것 같습니다" (X)
    - "PDF에서 직접 Figure 내용을 확인했으므로" (X)
    금지! 바로 Figure 설명만 출력하세요.
-4. **원문 해석** 필드는 위에 주어진 Figure Legend 원문을 한국어로 자연스럽게 번역/해석한 내용입니다.
-   - Legend 원문에 있는 정보만 사용하세요. 새로운 정보를 추가하거나 추측하지 마세요.
-   - 전문 용어는 영어 그대로 유지하면서 한국어 문장으로 풀어 쓰세요.
-   - Legend가 없거나 부족하면 "(원문 legend 없음)"으로만 표기하고 절대 추측해서 채우지 마세요.
-5. 각 Figure 항목은 반드시 **원문 해석** → **핵심 내용** → **세부 설명** 순서를 지키세요.
 
-위 예시처럼 세 필드를 순서대로 채워 Figure를 순서대로 설명해주세요.
+**필드 구성 (각 Figure마다 반드시 세 필드를 빠짐없이 출력하세요):**
+
+각 Figure 블록은 다음 형식을 정확히 따라야 합니다:
+
+```
+#### Figure N: <Figure 제목>
+**원문 해석**: <Figure Legend 원문을 한국어로 풀어쓴 1-3문장>
+**핵심 내용**: <이 Figure가 보여주는 주요 메시지 1문장>
+**세부 설명**:
+- Panel A: <Panel A 설명>
+- Panel B: <Panel B 설명>
+...
+```
+
+**원문 해석 필드는 절대 생략하면 안 됩니다.** 위에 제공된 "Figure Legend (논문에서 추출)" 텍스트에서 해당 Figure의 부분을 찾아 한국어로 풀어 써야 합니다.
+
+원문 해석 작성 규칙:
+- 위에 주어진 Figure Legend 원문에서 해당 Figure의 텍스트를 찾아 그것을 자연스러운 한국어로 번역/풀어서 쓰세요.
+- 전문 용어(gene/protein/method 이름)는 영어 그대로 유지하면서 한국어 문장으로 작성.
+- Figure Legend 원문에 있는 정보만 사용하세요. 새로운 정보를 추가하거나 추측하지 마세요.
+- 해당 Figure에 대한 legend 텍스트가 정말로 없는 경우(예: legend가 잘렸거나 다른 Figure만 추출된 경우)에만 "(원문 legend 없음)"으로 표기하세요.
+- "(원문 legend 없음)"이라고 적기 전에 반드시 위 Figure Legend 텍스트를 다시 한 번 확인하세요. 단 한 문장이라도 있으면 그것을 활용하세요.
+
+순서: **원문 해석** → **핵심 내용** → **세부 설명**. 이 순서를 절대 바꾸지 마세요.
+
+위 예시처럼 세 필드를 순서대로 빠짐없이 채워 Figure를 순서대로 설명해주세요.
 """
 
 
