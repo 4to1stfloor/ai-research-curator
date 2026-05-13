@@ -926,19 +926,22 @@ class PDFReportGenerator:
             if legend_content and re.fullmatch(r'\(?\s*원문\s*legend\s*없음\s*\)?\.?', legend_content):
                 legend_content = ""
 
+            # HTML-escape user content (legend has '<', '>' from stats like 'P < 0.001')
+            from html import escape as _esc
+
             # Build HTML block
             title_text = f"{fig_label}"
             if fig_title:
                 title_text += f": {fig_title}"
 
             block = f'<div class="figure-block">\n'
-            block += f'  <div class="figure-block-title">{title_text}</div>\n'
+            block += f'  <div class="figure-block-title">{_esc(title_text)}</div>\n'
 
             if legend_content:
-                block += f'  <div class="figure-legend-translation"><strong>원문 해석</strong>: {legend_content}</div>\n'
+                block += f'  <div class="figure-legend-translation"><strong>원문 해석</strong>: {_esc(legend_content)}</div>\n'
 
             if key_content:
-                block += f'  <div class="figure-block-detail"><strong>핵심 내용</strong>: {key_content}</div>\n'
+                block += f'  <div class="figure-block-detail"><strong>핵심 내용</strong>: {_esc(key_content)}</div>\n'
 
             if detail_content:
                 # Parse bullet points (- Panel A: ...)
@@ -948,9 +951,10 @@ class PDFReportGenerator:
                     block += '  <div class="figure-block-detail"><strong>세부 설명</strong>:</div>\n'
                     block += '  <ul class="figure-detail-list">\n'
                     for bullet in bullets:
-                        # Bold Panel labels
-                        bullet = re.sub(r'^(Panel\s+[A-Z])', r'<strong>\1</strong>', bullet)
-                        block += f'    <li>{bullet}</li>\n'
+                        # Escape first, then re-apply Panel bolding via regex on escaped text
+                        bullet_safe = _esc(bullet)
+                        bullet_safe = re.sub(r'^(Panel\s+[A-Z])', r'<strong>\1</strong>', bullet_safe)
+                        block += f'    <li>{bullet_safe}</li>\n'
                     block += '  </ul>\n'
                 elif not key_content:
                     block += f'  <div class="figure-block-detail">{detail_content}</div>\n'

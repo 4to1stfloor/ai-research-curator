@@ -658,24 +658,38 @@ flowchart TD
 
                 # Extract figure legends from body text
                 body_text = body_texts.get(paper_id, "")
-                legends = []
+                body_legends = []
                 if body_text:
-                    legends = self.figure_explanation_generator.extract_figure_legends(body_text)
+                    body_legends = self.figure_explanation_generator.extract_figure_legends(body_text)
 
                 # Skip if no figures and no legends
-                if not has_figures and not legends:
+                if not has_figures and not body_legends:
                     continue
 
-                # Combine legends for explanation
-                legend_text = "\n".join([
-                    f"Figure {l['figure_num']}: {l['legend']}"
-                    for l in legends
-                ]) if legends else ""
+                # Build legend_text with priority: PMC caption > body_text extraction
+                # PMC captions are full <figcaption> content (1000-3000 chars), much
+                # richer than the regex-extracted body legends. De-dup by figure_num.
+                legend_map = {}
 
-                # Also include captions from figures
+                # First pass: body text legends (fallback)
+                for l in body_legends:
+                    legend_map[str(l['figure_num'])] = l['legend']
+
+                # Second pass: PMC captions override (higher quality, longer)
                 for fig in pp.figures:
                     if isinstance(fig, dict) and fig.get('caption'):
-                        legend_text += f"\nFigure {fig.get('figure_num', '?')}: {fig['caption']}"
+                        fig_num = str(fig.get('figure_num', '?'))
+                        legend_map[fig_num] = fig['caption']
+
+                # Sort by figure number for stable ordering and join with clear separators
+                def _fig_sort_key(k):
+                    m = re.match(r'(\d+)([A-Za-z]?)', k)
+                    return (int(m.group(1)) if m else 999, m.group(2) if m else '')
+
+                legend_text = "\n\n---\n\n".join(
+                    f"Figure {num}: {text}"
+                    for num, text in sorted(legend_map.items(), key=lambda kv: _fig_sort_key(kv[0]))
+                )
 
                 # If we have figures but no legend text, create placeholder info
                 if not legend_text.strip() and has_figures:
