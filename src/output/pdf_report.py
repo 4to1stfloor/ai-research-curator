@@ -435,6 +435,41 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             color: var(--primary);
         }}
 
+        /* Figures stacked vertically: each figure followed by its explanation */
+        .figures-stacked {{
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            margin-top: 1rem;
+        }}
+
+        .figures-stacked .figure-block {{
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            border-left: 4px solid var(--accent);
+            margin-bottom: 0;
+            padding-bottom: 1.5rem;
+            border-bottom: none;
+        }}
+
+        .figure-image-wrap {{
+            background: white;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            text-align: center;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }}
+
+        .figure-img-large {{
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border-radius: 0.25rem;
+        }}
+
         /* Figure Explanation */
         .figure-explanation {{
             background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
@@ -675,8 +710,6 @@ PAPER_SECTION_TEMPLATE = """
 
         {figures_section}
 
-        {figure_explanation_section}
-
         {diagram_section}
     </div>
 </article>
@@ -866,6 +899,194 @@ class PDFReportGenerator:
         if len(html_parts) > 2:  # More than just the opening/closing tags
             return '\n'.join(html_parts)
         return ""
+
+    def _format_figures_with_explanations(
+        self,
+        figures: list,
+        explanation: Optional[str],
+    ) -> str:
+        """Render Figures interleaved with their explanations.
+
+        Layout: for each figure, show the image then its (원문 해석 + 핵심 내용 +
+        세부 설명) directly underneath. Figures and explanations are matched by
+        figure_num. Figures without explanations still render the image.
+        Explanations without a matching image (e.g. legend-only) still render
+        the text block.
+        """
+        if not figures and not explanation:
+            return ""
+
+        # Build figure_num -> image_html map
+        fig_image_html = {}
+        for fig_item in (figures or [])[:20]:
+            try:
+                if isinstance(fig_item, dict):
+                    fig_path = fig_item.get('path', '')
+                    fig_num = str(fig_item.get('figure_num', '?'))
+                else:
+                    fig_path = fig_item
+                    fig_num = '?'
+
+                if not fig_path or not Path(fig_path).exists():
+                    continue
+
+                with open(fig_path, 'rb') as f:
+                    img_data = base64.b64encode(f.read()).decode()
+                ext = Path(fig_path).suffix.lower()
+                mime = 'image/png' if ext == '.png' else 'image/jpeg' if ext in ['.jpg', '.jpeg'] else 'image/gif'
+
+                fig_image_html[fig_num] = (
+                    f'<div class="figure-image-wrap">'
+                    f'<img src="data:{mime};base64,{img_data}" alt="Figure {fig_num}" class="figure-img-large">'
+                    f'</div>'
+                )
+            except Exception as e:
+                print(f"Error embedding figure {fig_item}: {e}")
+
+        # Parse explanation into ordered (fig_num, fig_label, content) tuples,
+        # then map content -> rendered block.
+        explanation_blocks = self._parse_explanation_blocks(explanation) if explanation else []
+
+        # Render in explanation order (LLM normally outputs Figure 1..N in order),
+        # then append any image-only figures that have no explanation.
+        rendered = []
+        seen_nums = set()
+
+        for fig_num, fig_label, fig_title, legend, key, detail in explanation_blocks:
+            image_html = fig_image_html.get(str(fig_num), "")
+            rendered.append(
+                self._render_figure_block(image_html, fig_label, fig_title, legend, key, detail)
+            )
+            seen_nums.add(str(fig_num))
+
+        for fig_num, image_html in fig_image_html.items():
+            if fig_num not in seen_nums:
+                rendered.append(
+                    self._render_figure_block(image_html, f"Figure {fig_num}", "", "", "", "")
+                )
+
+        if not rendered:
+            return ""
+
+        content_html = "\n".join(rendered)
+        return f'''
+        <section class="section">
+            <h3 class="section-title">
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+                    <path d="M2.002 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2h-12zm12 1a1 1 0 0 1 1 1v6.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71-2.66-1.772a.5.5 0 0 0-.63.062L1.002 12V3a1 1 0 0 1 1-1h12z"/>
+                </svg>
+                Figures
+            </h3>
+            <div class="figures-stacked">
+                {content_html}
+            </div>
+        </section>'''
+
+    @staticmethod
+    def _render_figure_block(
+        image_html: str,
+        fig_label: str,
+        fig_title: str,
+        legend: str,
+        key: str,
+        detail: str,
+    ) -> str:
+        """Render one figure with image on top and explanation below."""
+        from html import escape as _esc
+
+        title_text = fig_label
+        if fig_title:
+            title_text = f"{fig_label}: {fig_title}"
+
+        block = '<div class="figure-block">\n'
+        if image_html:
+            block += f'  {image_html}\n'
+        block += f'  <div class="figure-block-title">{_esc(title_text)}</div>\n'
+
+        if legend:
+            block += f'  <div class="figure-legend-translation"><strong>원문 해석</strong>: {_esc(legend)}</div>\n'
+
+        if key:
+            block += f'  <div class="figure-block-detail"><strong>핵심 내용</strong>: {_esc(key)}</div>\n'
+
+        if detail:
+            bullets = re.split(r'\n?\s*-\s+', detail)
+            bullets = [b.strip() for b in bullets if b.strip()]
+            if bullets:
+                block += '  <div class="figure-block-detail"><strong>세부 설명</strong>:</div>\n'
+                block += '  <ul class="figure-detail-list">\n'
+                for bullet in bullets:
+                    bullet_safe = _esc(bullet)
+                    bullet_safe = re.sub(r'^(Panel\s+[A-Z])', r'<strong>\1</strong>', bullet_safe)
+                    block += f'    <li>{bullet_safe}</li>\n'
+                block += '  </ul>\n'
+
+        block += '</div>'
+        return block
+
+    def _parse_explanation_blocks(self, explanation: str) -> list:
+        """Parse LLM explanation into list of (fig_num, fig_label, title, legend, key, detail).
+
+        Returns empty list if parsing fails entirely.
+        """
+        if not explanation:
+            return []
+
+        # Remove separator lines and meta-commentary
+        explanation = re.sub(r'\n-{3,}\n', '\n', explanation)
+        explanation = re.sub(r'(?:\n|^)\*{0,2}참고\*{0,2}\s*[:：].*', '', explanation, flags=re.DOTALL)
+        explanation = re.sub(r'(?:\n|^)실제 논문의.*', '', explanation, flags=re.DOTALL)
+
+        parts = re.split(
+            r'(?:^|\n)(?:#{1,4}\s*)?(Figure\s*\d+(?:[A-Za-z]|[——-]figure\s+supplement\s+\d+\w?)?)\s*[:：]\s*',
+            explanation,
+        )
+
+        blocks = []
+        i = 1
+        while i < len(parts) - 1:
+            fig_label = parts[i].strip()
+            content = parts[i + 1].strip()
+
+            num_match = re.search(r'\d+[A-Za-z]?', fig_label)
+            fig_num = num_match.group(0) if num_match else ""
+
+            legend_match = re.search(r'\*{0,2}원문\s*해석\*{0,2}\s*[:：]\s*', content)
+            key_match = re.search(r'\*{0,2}핵심\s*내용\*{0,2}\s*[:：]\s*', content)
+            detail_match = re.search(r'\*{0,2}세부\s*설명\*{0,2}\s*[:：]\s*', content)
+
+            first_marker_pos = min(
+                (m.start() for m in (legend_match, key_match, detail_match) if m),
+                default=None,
+            )
+            fig_title = content[:first_marker_pos].strip() if first_marker_pos is not None else (
+                content.split('\n')[0] if '\n' in content else ""
+            )
+
+            def _slice(start_match, *next_matches):
+                if not start_match:
+                    return ""
+                ends = [m.start() for m in next_matches if m and m.start() > start_match.end()]
+                end = min(ends) if ends else len(content)
+                return content[start_match.end():end].strip()
+
+            legend = _slice(legend_match, key_match, detail_match)
+            key = _slice(key_match, detail_match)
+            detail = _slice(detail_match)
+
+            if not first_marker_pos:
+                # No structured markers — put everything in detail
+                detail = content if not fig_title else content[len(fig_title):].strip()
+
+            # Drop placeholder "원문 legend 없음"
+            if legend and re.fullmatch(r'\(?\s*원문\s*legend\s*없음\s*\)?\.?', legend):
+                legend = ""
+
+            blocks.append((fig_num, fig_label, fig_title, legend, key, detail))
+            i += 2
+
+        return blocks
 
     def _format_figure_explanation(self, explanation: Optional[str]) -> str:
         """Format figure explanation for HTML with structured Figure blocks."""
@@ -1088,8 +1309,7 @@ class PDFReportGenerator:
                     doi=paper.doi or "N/A",
                     summary=self._format_summary(pp.summary_korean),
                     translation=self._format_translation(pp.abstract_translation),
-                    figures_section=self._format_figures(pp.figures),
-                    figure_explanation_section=self._format_figure_explanation(fig_explanation),
+                    figures_section=self._format_figures_with_explanations(pp.figures, fig_explanation),
                     diagram_section=self._format_diagram(diagram)
                 )
             paper_sections.append(section)

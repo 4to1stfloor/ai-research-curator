@@ -810,11 +810,36 @@ class PaperContentFetcher:
                     if url_match:
                         fig_num = url_match.group(1).lstrip('0') or '1'
 
-                    # Get caption
-                    caption = ""
-                    caption_elem = fig.find('figcaption') or fig.find('p', class_='caption')
-                    if caption_elem:
-                        caption = caption_elem.get_text(strip=True)
+                    # Get caption — PLOS uses several layouts:
+                    # 1. <div class="figcaption"> with the title (e.g., "Fig 1. ...")
+                    # 2. <p class="caption_target"> sibling containing Panel A/B/C descriptions
+                    # 3. <figcaption> or <p class="caption"> on older pages
+                    title_part = ""
+                    body_part = ""
+                    figcap_div = fig.find(['div', 'figcaption'], class_=re.compile(r'figcaption|fig-?caption'))
+                    if figcap_div:
+                        title_part = figcap_div.get_text(separator=' ', strip=True)
+                    legacy = fig.find('p', class_='caption')
+                    if legacy:
+                        body_part = legacy.get_text(separator=' ', strip=True)
+                    # Sibling caption_target paragraph after div.figure
+                    if not body_part:
+                        sibling = fig.find_next_sibling()
+                        for _ in range(3):
+                            if sibling is None:
+                                break
+                            if sibling.name == 'p' and 'caption_target' in (sibling.get('class') or []):
+                                body_part = sibling.get_text(separator=' ', strip=True)
+                                break
+                            sibling = sibling.find_next_sibling()
+                    # caption_target may also live inside the figure div itself
+                    if not body_part:
+                        inner = fig.find('p', class_='caption_target')
+                        if inner:
+                            body_part = inner.get_text(separator=' ', strip=True)
+
+                    caption_parts = [p for p in (title_part, body_part) if p]
+                    caption = " ".join(caption_parts)
 
                     if fig_num in seen_nums:
                         continue
