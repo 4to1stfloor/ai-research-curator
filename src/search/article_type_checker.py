@@ -20,6 +20,7 @@ NATURE_RESEARCH_TYPES = {
 }
 
 # Nature dc.type values that are NOT research papers (exclude)
+# Values are normalized (lowercase, alpha-only) before matching.
 NATURE_NON_RESEARCH_TYPES = {
     "briefcommunication",
     "comment",
@@ -33,15 +34,23 @@ NATURE_NON_RESEARCH_TYPES = {
     "researchhighlight",
     "resource",  # data/tool descriptions, not primary research
     "review",
+    "reviewpaper",         # Nature's actual dc.type for review articles
+    "reviewarticle",
+    "systematicreview",
+    "metaanalysis",
     "viewpoint",
     "opinion",
     "correspondence",
-    "matter arising",
     "matterarising",
     "retraction",
     "correction",
     "erratum",
     "highlight",
+    "protocol",  # Nature Protocols entries — methods/recipes, not new findings
+    "addendum",
+    "publishererratum",
+    "case-report",
+    "casereport",
 }
 
 
