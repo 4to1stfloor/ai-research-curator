@@ -25,20 +25,28 @@ else
     echo "[PATH] CLAUDE_BIN_DIR not set, Claude CLI may not be available" >> "${LOG_FILE}"
 fi
 
-# Pull latest code from GitHub (stash local data changes first)
+# Pull latest code from GitHub (stash any local changes first)
+# We stash data/ (paper_history.json), config/ (user-customized settings),
+# and src/ (in case anyone hand-edited code on this machine). Anything else
+# we leave alone — that way git pull --ff-only can always succeed.
 cd "${SCRIPT_DIR}"
 echo "[Update] git pull..." >> "${LOG_FILE}"
 OLD_HEAD=$(git rev-parse HEAD 2>/dev/null)
 STASHED=false
-if ! git diff --quiet HEAD -- data/ 2>/dev/null; then
-    git stash push -m "cron-auto-stash" -- data/ >> "${LOG_FILE}" 2>&1 && STASHED=true
-    echo "[Update] Stashed local data changes" >> "${LOG_FILE}"
+if ! git diff --quiet HEAD -- data/ config/ src/ scripts/ 2>/dev/null; then
+    git stash push -m "cron-auto-stash" -- data/ config/ src/ scripts/ >> "${LOG_FILE}" 2>&1 && STASHED=true
+    echo "[Update] Stashed local changes (data/, config/, src/, scripts/)" >> "${LOG_FILE}"
 fi
 git pull --ff-only >> "${LOG_FILE}" 2>&1 || echo "[Update] git pull failed, using current version" >> "${LOG_FILE}"
 if [ "${STASHED}" = true ]; then
     git stash pop >> "${LOG_FILE}" 2>&1 || {
-        echo "[Update] Stash pop conflict, keeping remote version for data/" >> "${LOG_FILE}"
+        # On conflict: data/ → remote (we accumulate history from many sources),
+        # config/ → local (user settings), src/ + scripts/ → remote (latest code)
+        echo "[Update] Stash pop conflict, resolving by category" >> "${LOG_FILE}"
         git checkout --theirs data/ >> "${LOG_FILE}" 2>&1
+        git checkout --ours config/ >> "${LOG_FILE}" 2>&1
+        git checkout --theirs src/ scripts/ >> "${LOG_FILE}" 2>&1
+        git add -A data/ config/ src/ scripts/ >> "${LOG_FILE}" 2>&1
         git stash drop >> "${LOG_FILE}" 2>&1
     }
 fi
