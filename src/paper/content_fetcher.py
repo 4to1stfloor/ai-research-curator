@@ -595,12 +595,14 @@ class PaperContentFetcher:
             if figures:
                 source = "journal"
 
-        # Method 5: Extract from downloaded PDF (fallback)
-        if not figures and paper.local_pdf_path:
-            print(f"[ContentFetcher] Trying PDF extraction: {paper.local_pdf_path}")
-            figures = self.figure_fetcher.fetch_from_pdf(paper.local_pdf_path, paper.title)
-            if figures:
-                source = "pdf"
+        # PDF fallback is intentionally disabled.
+        # PyMuPDF extracts every embedded image, which on many journal PDFs
+        # (e.g., eLife) means panels and sub-panels of one figure get split
+        # into separate "figures" with wrong numbering — e.g., Figure 1D
+        # appears as our "Figure 1" and two sub-panels of Figure 6A appear
+        # as "Figure 2" and "Figure 3". Showing nothing is better than
+        # showing mislabeled images. The figure explanation section will
+        # still render from extracted legends in the body text.
 
         # Fetch text content (from abstract if no other source)
         if paper.abstract:
