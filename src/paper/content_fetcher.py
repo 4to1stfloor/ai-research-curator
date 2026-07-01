@@ -97,10 +97,31 @@ class FigureFetcher:
             url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/"
             print(f"[PMC] Fetching figures from: {url}")
 
-            response = self.session.get(url, timeout=self.timeout)
-            response.raise_for_status()
+            # NCBI throttles clients that request many pages in quick succession
+            # and starts returning a reCAPTCHA interstitial (~20 KB, no figures).
+            # Detect it and retry with exponential backoff. The block typically
+            # lifts within a few minutes.
+            html_text = None
+            for attempt in range(3):
+                response = self.session.get(url, timeout=self.timeout)
+                response.raise_for_status()
+                text = response.text
+                looks_like_captcha = (
+                    len(text) < 50000
+                    and ('reCAPTCHA' in text or 'Checking your browser' in text)
+                )
+                if not looks_like_captcha:
+                    html_text = text
+                    break
+                wait_s = 30 * (attempt + 1)  # 30s, 60s, 90s
+                print(f"[PMC] reCAPTCHA interstitial detected (attempt {attempt + 1}/3), waiting {wait_s}s")
+                time.sleep(wait_s)
 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            if html_text is None:
+                print(f"[PMC] Blocked by reCAPTCHA after retries, giving up on {pmcid}")
+                return figures
+
+            soup = BeautifulSoup(html_text, 'html.parser')
 
             # Find figure elements
             # PMC uses <figure> elements or <div class="fig">

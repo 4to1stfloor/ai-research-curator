@@ -407,6 +407,14 @@ class PaperDigestPipeline:
                     total=None
                 )
 
+                # Space out requests: PMC/NCBI throttles rapid consecutive
+                # requests with a reCAPTCHA interstitial, which returns 0
+                # figures. A short sleep between papers keeps us under the
+                # threshold. (First iteration skips the sleep.)
+                if i > 1:
+                    import time as _time
+                    _time.sleep(5)
+
                 # Initialize processing info for this paper
                 proc_info = ProcessingInfo()
 
