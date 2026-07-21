@@ -148,6 +148,11 @@ class EnvConfig(BaseSettings):
     slack_bot_token: Optional[str] = Field(default=None, alias="SLACK_BOT_TOKEN")
     slack_user_email: Optional[str] = Field(default=None, alias="SLACK_USER_EMAIL")
 
+    # Institutional library proxy (optional — for accessing subscription PDFs)
+    libproxy_url: Optional[str] = Field(default=None, alias="LIBPROXY_URL")
+    libproxy_id: Optional[str] = Field(default=None, alias="LIBPROXY_ID")
+    libproxy_password: Optional[str] = Field(default=None, alias="LIBPROXY_PASSWORD")
+
     # Output directory override (from .env, not tracked by git)
     output_dir: Optional[str] = Field(default=None, alias="OUTPUT_DIR")
 

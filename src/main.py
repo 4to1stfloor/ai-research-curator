@@ -69,7 +69,20 @@ class PaperDigestPipeline:
         # Downloader & Parser
         papers_dir = resolve_path(self.config.storage.papers_dir, self.base_dir)
         self.papers_dir = papers_dir
-        self.downloader = PaperDownloader(papers_dir, email=self.env_config.pubmed_email)
+        # Optional institutional library proxy for subscription PDFs
+        library_proxy = None
+        if self.env_config.libproxy_url and self.env_config.libproxy_id and self.env_config.libproxy_password:
+            from .paper.library_proxy import LibraryProxyDownloader
+            library_proxy = LibraryProxyDownloader(
+                proxy_base_url=self.env_config.libproxy_url,
+                user_id=self.env_config.libproxy_id,
+                password=self.env_config.libproxy_password,
+            )
+            console.print(f"[green]Library proxy configured: {self.env_config.libproxy_url}[/green]")
+
+        self.downloader = PaperDownloader(
+            papers_dir, email=self.env_config.pubmed_email, library_proxy=library_proxy,
+        )
         self.pdf_parser = PDFParser(papers_dir / "figures")
 
         # Content Fetcher (for web-based content retrieval)
@@ -368,11 +381,16 @@ class PaperDigestPipeline:
         return unique_papers
 
     def download_papers(self, papers: list[Paper]) -> list[Paper]:
-        """Download PDFs for open access papers."""
+        """Download PDFs for open access papers (or non-OA if library proxy is set)."""
         console.print("[cyan]Downloading papers...[/cyan]")
 
+        has_proxy = self.downloader.library_proxy is not None
         for paper in papers:
+            # OA papers: always try. Non-OA papers: only try if library proxy
+            # is configured (proxy is the only realistic way to get their PDF).
             if paper.is_open_access or paper.pdf_url:
+                self.downloader.download(paper)
+            elif has_proxy and paper.doi:
                 self.downloader.download(paper)
 
         pdf_count = len([p for p in papers if p.local_pdf_path])

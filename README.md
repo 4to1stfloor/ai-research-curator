@@ -514,6 +514,38 @@ python -m src.main --max-papers 1
 | `invalid_auth` | Bot Token 잘못됨 | Token 다시 복사. `xoxb-`로 시작하는지 확인 |
 | `not_in_channel` | Bot이 채널에 없음 | DM은 자동으로 채널 생성됨 — 다른 에러일 가능성 |
 
+## 기관 도서관 프록시 (선택, non-OA 논문용)
+
+기관 도서관에서 구독하는 저널(Nature, Science, Cell 등)의 PDF를 자동으로 받으려면 도서관 프록시 로그인 정보를 설정할 수 있습니다.
+
+> **⚠️ 주의**: 대부분의 출판사 라이선스는 "automated / systematic downloading"을 금지합니다. 개인 리서치 용도로 주 몇 편 수준(예: cron 기본 5편/주)에서만 사용하세요. 대량 다운로드 시 **기관 전체 IP가 차단**될 수 있습니다.
+
+지원 프록시 방식: **n2s / EZproxy 스타일** (URL rewriting, `link.n2s?url=...` 패턴)
+
+### 설정
+
+1. `.env`에 도서관 프록시 정보 추가:
+   ```env
+   LIBPROXY_URL=https://libproxy.your-institution.kr:8443
+   LIBPROXY_ID=your_library_id
+   LIBPROXY_PASSWORD=your_library_password
+   ```
+
+2. 세 값이 모두 설정되면 자동으로 활성화됩니다 (config.yaml 수정 불필요).
+
+### 동작 방식
+
+- 각 논문마다 **먼저 OA 소스** (PMC, Unpaywall, 저널 무료 PDF)를 시도
+- 모두 실패하면 **마지막 fallback**으로 도서관 프록시 시도
+- 프록시로도 실패하면 abstract 기반 요약으로 처리
+
+지원 출판사 (DOI prefix 기반 자동 매칭):
+- Nature (`10.1038/*`)
+- Science / AAAS (`10.1126/*`)
+- Wiley (`10.1002/*`)
+- Oxford (`10.1093/*`)
+- 그 외는 DOI 리졸버를 통해 fallback
+
 ## 자동 업데이트 알림
 
 cron이 매주 실행될 때 자동으로 `git pull`을 받아 최신 버전으로 동작합니다.

@@ -22,7 +22,8 @@ class PaperDownloader:
     def __init__(
         self,
         output_dir: str | Path,
-        email: Optional[str] = None
+        email: Optional[str] = None,
+        library_proxy=None,  # Optional LibraryProxyDownloader
     ):
         """
         Initialize downloader.
@@ -30,10 +31,12 @@ class PaperDownloader:
         Args:
             output_dir: Directory to save downloaded papers
             email: Email for Unpaywall API (required for OA lookup)
+            library_proxy: Optional institutional proxy for subscription PDFs.
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.email = email
+        self.library_proxy = library_proxy
 
         self.session = requests.Session()
         # Use browser-like headers to avoid being blocked
@@ -275,6 +278,17 @@ class PaperDownloader:
                 print(f"Downloaded: {paper.title[:50]}...")
                 return str(output_path)
             time.sleep(1)  # Rate limiting
+
+        # Last-resort: institutional library proxy for subscription PDFs.
+        # Only used when every public/OA source above failed.
+        if self.library_proxy is not None and paper.doi:
+            proxied_pdf = self.library_proxy.guess_pdf_url_from_doi(paper.doi)
+            if proxied_pdf:
+                print(f"Trying library proxy: {proxied_pdf[:80]}...")
+                if self.library_proxy.download_pdf(proxied_pdf, output_path):
+                    paper.local_pdf_path = str(output_path)
+                    print(f"Downloaded via library proxy: {paper.title[:50]}...")
+                    return str(output_path)
 
         print(f"Could not download: {paper.title[:50]}...")
         return None
