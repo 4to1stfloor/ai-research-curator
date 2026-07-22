@@ -71,6 +71,7 @@ class PaperDigestPipeline:
         self.papers_dir = papers_dir
         # Optional institutional library proxy for subscription PDFs
         library_proxy = None
+        library_proxy_browser = None
         if self.env_config.libproxy_url and self.env_config.libproxy_id and self.env_config.libproxy_password:
             from .paper.library_proxy import LibraryProxyDownloader
             library_proxy = LibraryProxyDownloader(
@@ -80,8 +81,28 @@ class PaperDigestPipeline:
             )
             console.print(f"[green]Library proxy configured: {self.env_config.libproxy_url}[/green]")
 
+            # Browser-based proxy for publishers with anti-bot on PDF endpoint
+            try:
+                from .paper.library_proxy_browser import BrowserLibraryProxy
+                browser_proxy = BrowserLibraryProxy(
+                    proxy_base_url=self.env_config.libproxy_url,
+                    user_id=self.env_config.libproxy_id,
+                    password=self.env_config.libproxy_password,
+                    download_dir=papers_dir / "browser_downloads",
+                )
+                if browser_proxy.is_available():
+                    library_proxy_browser = browser_proxy
+                    console.print("[green]Browser-based proxy available (Xvfb + Chromium)[/green]")
+                else:
+                    console.print("[yellow]Browser-based proxy unavailable (missing Xvfb/Chrome/selenium)[/yellow]")
+            except ImportError as e:
+                console.print(f"[yellow]Browser-based proxy import failed: {e}[/yellow]")
+
         self.downloader = PaperDownloader(
-            papers_dir, email=self.env_config.pubmed_email, library_proxy=library_proxy,
+            papers_dir,
+            email=self.env_config.pubmed_email,
+            library_proxy=library_proxy,
+            library_proxy_browser=library_proxy_browser,
         )
         self.pdf_parser = PDFParser(papers_dir / "figures")
 

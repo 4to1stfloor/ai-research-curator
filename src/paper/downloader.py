@@ -23,7 +23,8 @@ class PaperDownloader:
         self,
         output_dir: str | Path,
         email: Optional[str] = None,
-        library_proxy=None,  # Optional LibraryProxyDownloader
+        library_proxy=None,           # Optional LibraryProxyDownloader (requests-based)
+        library_proxy_browser=None,   # Optional BrowserLibraryProxy (Xvfb+Selenium)
     ):
         """
         Initialize downloader.
@@ -32,11 +33,14 @@ class PaperDownloader:
             output_dir: Directory to save downloaded papers
             email: Email for Unpaywall API (required for OA lookup)
             library_proxy: Optional institutional proxy for subscription PDFs.
+            library_proxy_browser: Optional browser-driven proxy for publishers
+                with anti-bot protection on the PDF endpoint (Cell/Elsevier).
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.email = email
         self.library_proxy = library_proxy
+        self.library_proxy_browser = library_proxy_browser
 
         self.session = requests.Session()
         # Use browser-like headers to avoid being blocked
@@ -282,13 +286,27 @@ class PaperDownloader:
         # Last-resort: institutional library proxy for subscription PDFs.
         # Only used when every public/OA source above failed.
         if self.library_proxy is not None and paper.doi:
-            proxied_pdf = self.library_proxy.guess_pdf_url_from_doi(paper.doi)
-            if proxied_pdf:
-                print(f"Trying library proxy: {proxied_pdf[:80]}...")
-                if self.library_proxy.download_pdf(proxied_pdf, output_path):
-                    paper.local_pdf_path = str(output_path)
-                    print(f"Downloaded via library proxy: {paper.title[:50]}...")
-                    return str(output_path)
+            # For Cell/Elsevier, requests-based download hits an anti-bot
+            # challenge — jump straight to the browser-based fallback below.
+            if not paper.doi.startswith("10.1016/"):
+                proxied_pdf = self.library_proxy.guess_pdf_url_from_doi(paper.doi)
+                if proxied_pdf:
+                    print(f"Trying library proxy: {proxied_pdf[:80]}...")
+                    if self.library_proxy.download_pdf(proxied_pdf, output_path):
+                        paper.local_pdf_path = str(output_path)
+                        print(f"Downloaded via library proxy: {paper.title[:50]}...")
+                        return str(output_path)
+
+        # Absolute last-resort: browser-based proxy download (Xvfb + Selenium).
+        # Used for publishers with anti-bot on the PDF endpoint (e.g. Cell/Elsevier).
+        # Requires Xvfb + Chromium + selenium installed; falls through silently
+        # otherwise.
+        if self.library_proxy_browser is not None and paper.doi:
+            print(f"Trying library proxy (browser): {paper.doi}")
+            if self.library_proxy_browser.download_pdf_from_doi(paper.doi, output_path):
+                paper.local_pdf_path = str(output_path)
+                print(f"Downloaded via browser proxy: {paper.title[:50]}...")
+                return str(output_path)
 
         print(f"Could not download: {paper.title[:50]}...")
         return None

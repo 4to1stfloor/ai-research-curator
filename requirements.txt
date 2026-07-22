@@ -23,3 +23,5 @@ click>=8.1.0
 # XML/HTML Parsing
 lxml>=5.1.0
 beautifulsoup4>=4.12.0
+selenium>=4.15
+pyvirtualdisplay>=3.0

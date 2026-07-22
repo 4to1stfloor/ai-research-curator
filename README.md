@@ -540,11 +540,27 @@ python -m src.main --max-papers 1
 - 프록시로도 실패하면 abstract 기반 요약으로 처리
 
 지원 출판사 (DOI prefix 기반 자동 매칭):
-- Nature (`10.1038/*`)
-- Science / AAAS (`10.1126/*`)
-- Wiley (`10.1002/*`)
-- Oxford (`10.1093/*`)
+- Nature (`10.1038/*`) — requests-based
+- Science / AAAS (`10.1126/*`) — requests-based
+- Wiley (`10.1002/*`) — requests-based
+- Oxford (`10.1093/*`) — requests-based
+- Cell / Elsevier (`10.1016/*`) — 브라우저 기반 (Xvfb + Chromium 필요)
 - 그 외는 DOI 리졸버를 통해 fallback
+
+### Cell / Elsevier 지원 (선택)
+
+Cell Press와 Elsevier는 PDF 엔드포인트에 anti-bot 보호가 걸려 있어서 일반 HTTP 요청으로는 못 받습니다. 실제 브라우저를 가상 디스플레이(Xvfb) 안에 띄워서 사람처럼 다운로드 버튼을 클릭하는 방식으로 우회합니다.
+
+**필요 설치** (Linux 기준):
+```bash
+sudo apt-get install -y xvfb
+# 프로젝트 venv 안에서
+pip install selenium pyvirtualdisplay
+# Chromium 필요 (Playwright가 이미 설치했다면 그것 재사용)
+playwright install chromium
+```
+
+세 가지 조건(Xvfb / Chromium / selenium+pyvirtualdisplay)이 모두 충족되면 자동 활성화됩니다. 하나라도 없으면 그냥 건너뛰고 abstract-only로 처리하니 안전하게 설치할 수 있습니다.
 
 ## 자동 업데이트 알림
 
