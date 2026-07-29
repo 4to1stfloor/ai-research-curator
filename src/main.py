@@ -458,7 +458,11 @@ class PaperDigestPipeline:
                 proc_info = ProcessingInfo()
 
                 # Determine if this is a non-OA abstract-only paper
-                is_non_oa = not (paper.is_open_access or paper.pdf_url)
+                # If download_papers actually landed a PDF (e.g. via the
+                # nature.com fallback), treat this paper as OA regardless of
+                # what PubMed reported — we can extract the body text and
+                # figures the same way we would for any OA paper.
+                is_non_oa = not (paper.is_open_access or paper.pdf_url or paper.local_pdf_path)
 
                 # Fetch abstract from DOI if not available or too short (e.g., RSS source)
                 if paper.doi and (not paper.abstract or len(paper.abstract) < 500):
