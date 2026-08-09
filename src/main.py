@@ -742,11 +742,16 @@ flowchart TD
                     for num, text in sorted(legend_map.items(), key=lambda kv: _fig_sort_key(kv[0]))
                 )
 
-                # If we have figures but no legend text, create placeholder info
-                if not legend_text.strip() and has_figures:
-                    fig_count = len(pp.figures)
-                    legend_text = f"(논문에서 추출한 {fig_count}개의 Figure가 있습니다. Figure legend 텍스트는 추출되지 않았습니다. 논문 요약을 기반으로 Figure의 내용을 추측하여 설명해주세요.)"
-                elif not legend_text.strip():
+                # No legend → do NOT fabricate one. Skip entirely; the figure
+                # section will still render the images with just a title placeholder.
+                # (Previously we told the LLM to "guess based on the summary" which
+                # is exactly the kind of hallucination we want to avoid.)
+                if not legend_text.strip():
+                    if has_figures:
+                        console.print(
+                            f"[yellow]Skipping figure explanation for {pp.paper.title[:40]}: "
+                            f"no legend extracted from PMC/journal/body text[/yellow]"
+                        )
                     continue
 
                 # Generate explanation

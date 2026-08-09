@@ -394,15 +394,34 @@ class FigureFetcher:
                         continue
                     seen_urls.add(img_src)
 
-                    # Get caption
-                    caption_elem = container.find(['figcaption', 'div'], class_=re.compile(r'caption', re.IGNORECASE))
-                    caption = caption_elem.get_text(strip=True) if caption_elem else ""
+                    # Get caption — try figcaption (no class needed), then div-with-caption-class
+                    caption_elem = container.find('figcaption')
+                    if not caption_elem:
+                        caption_elem = container.find(['div', 'section'], class_=re.compile(r'caption', re.IGNORECASE))
+                    caption = caption_elem.get_text(separator=' ', strip=True) if caption_elem else ""
 
                     # Figure number
                     fig_num = str(i)
                     fig_match = re.search(r'[Ff]ig(?:ure)?\.?\s*(\d+[A-Za-z]?)', caption or img.get('alt', ''))
                     if fig_match:
                         fig_num = fig_match.group(1)
+
+                    # Nature papers: landing-page figcaption only has the title, not panel-
+                    # by-panel body. Fetch the dedicated /figures/N page which has the full
+                    # <div data-test="bottom-caption">.
+                    if 'nature.com' in final_url and fig_num.isdigit():
+                        try:
+                            fig_page_url = re.sub(r'/articles/([^/]+).*', rf'/articles/\1/figures/{fig_num}', final_url)
+                            fp = self.session.get(fig_page_url, timeout=self.timeout)
+                            if fp.status_code == 200:
+                                fs = BeautifulSoup(fp.text, 'html.parser')
+                                nature_cap = fs.find('div', attrs={'data-test': 'bottom-caption'})
+                                if nature_cap:
+                                    body = nature_cap.get_text(separator=' ', strip=True)
+                                    if body and len(body) > len(caption):
+                                        caption = f"{caption} {body}".strip() if caption else body
+                        except Exception:
+                            pass
 
                     # Skip if figure number already processed
                     if fig_num in seen_fig_nums:

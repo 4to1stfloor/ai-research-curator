@@ -574,25 +574,25 @@ FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
 
 ```
 #### Figure N: <Figure 제목>
-**원문 해석**: <Figure Legend 원문을 한국어로 풀어쓴 1-3문장>
+**원문 해석**: <Figure Legend 원문을 한국어로 풀어쓴 문단, 모든 Panel 포함>
 **핵심 내용**: <이 Figure가 보여주는 주요 메시지 1문장>
 **세부 설명**:
 - Panel A: <Panel A 설명>
 - Panel B: <Panel B 설명>
-...
+- Panel C: <Panel C 설명>
+... (Legend에 있는 모든 Panel을 마지막까지 빠뜨리지 말고 나열. Panel K까지 있으면 K까지, 소문자면 소문자로.)
 ```
 
 **원문 해석 필드는 절대 생략하면 안 됩니다.** 위에 제공된 "Figure Legend (논문에서 추출)" 텍스트에서 해당 Figure의 부분을 찾아 한국어로 풀어 써야 합니다.
 
 원문 해석 작성 규칙:
 - 위에 주어진 Figure Legend 원문에서 해당 Figure의 텍스트를 찾아 그것을 자연스러운 한국어로 번역/풀어서 쓰세요.
-- **Panel별 디테일을 모두 포함하세요**. Legend 원문에 (A), (B), (C), (D), (E), (F) 등 Panel 표시가 있으면 그 Panel 각각의 실험 내용/조건/측정 지표/통계 검정을 한국어로 옮겨야 합니다. Figure title만 한국어로 풀어 쓰고 끝내면 안 됩니다.
+- **모든 Panel을 빠짐없이 포함하세요**. Legend 원문에 있는 Panel 표시 (a, b, c, ..., k, l, m, ... 또는 A, B, C, ...) 를 하나도 빠뜨리지 말고 각각 한국어로 서술하세요. 예: legend에 Panel a-k가 있으면 세부 설명에도 반드시 a부터 k까지 11개 항목이 있어야 합니다.
 - 원문에 있는 구체적인 정보(샘플 수 N, scale bar μm 단위, 통계 검정명 Mann-Whitney/Student's t test, 사용된 model 이름, marker/gene 이름, p-value 임계치 등)를 그대로 한국어 문장에 포함하세요.
 - 전문 용어(gene/protein/method 이름)는 영어 그대로 유지하면서 한국어 문장으로 작성.
 - Figure Legend 원문에 있는 정보만 사용하세요. 새로운 정보를 추가하거나 추측하지 마세요.
-- 결과 길이 가이드: 원문 legend가 길다면 (수백자 이상) 원문 해석도 그에 맞게 여러 문장으로 작성. Panel이 6개면 Panel별 한 문장씩 최소 6문장 정도.
-- 해당 Figure에 대한 legend 텍스트가 정말로 없는 경우(예: legend가 잘렸거나 다른 Figure만 추출된 경우)에만 "(원문 legend 없음)"으로 표기하세요.
-- "(원문 legend 없음)"이라고 적기 전에 반드시 위 Figure Legend 텍스트를 다시 한 번 확인하세요. 단 한 문장이라도 있으면 그것을 활용하세요.
+- 결과 길이 가이드: 원문 legend가 길다면 (수백자 이상) 원문 해석도 그에 맞게 여러 문장으로 작성.
+- **절대 금지**: "(원문 legend 없음)" 같은 placeholder를 출력하지 마세요. 이 함수는 legend가 있을 때만 호출됩니다. 만약 특정 Figure의 legend가 위에 없다면 그 Figure는 아예 출력하지 마세요.
 
 순서: **원문 해석** → **핵심 내용** → **세부 설명**. 이 순서를 절대 바꾸지 마세요.
 
