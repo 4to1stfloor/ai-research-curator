@@ -455,7 +455,15 @@ class FigureFetcher:
 
     def fetch_from_pdf(self, pdf_path: str, paper_title: str) -> list[dict]:
         """
-        Extract figures from a downloaded PDF using PyMuPDF.
+        Extract figures from a downloaded PDF by rendering pages that contain
+        figure captions.
+
+        Rationale: previous implementation used PyMuPDF's `get_images()`, which
+        pulls every embedded image. On journals like eLife each panel is embedded
+        as a separate image, so Figure 1D would show up as our "Figure 1" and
+        two sub-panels of Figure 6A would become "Figure 2/3". Rendering the
+        whole page that carries the "Fig. N" caption preserves the composite
+        layout as the reader sees it.
 
         Args:
             pdf_path: Path to the PDF file
@@ -476,75 +484,70 @@ class FigureFetcher:
             return figures
 
         try:
-            print(f"[PDF] Extracting figures from: {pdf_path}")
+            print(f"[PDF] Rendering figures from: {pdf_path}")
             doc = fitz.open(pdf_path)
 
-            fig_num = 0
-            seen_images = set()  # Track image hashes to avoid duplicates
+            # Find pages that carry a figure caption. Caption typically starts
+            # with "Fig. N." or "Figure N." at the beginning of a line.
+            caption_re = re.compile(
+                r'(?:^|\n)\s*(?:Fig\.?|Figure)\s+(\d+)[.:]?\s+([^\n]{20,})',
+                re.MULTILINE,
+            )
+
+            # Group hits by figure number so we don't double-render a figure
+            # whose caption spans two pages.
+            seen_fig_nums = set()
 
             for page_num in range(len(doc)):
                 page = doc[page_num]
-                images = page.get_images(full=True)
+                text = page.get_text()
+                if not text:
+                    continue
 
-                for img_idx, img_info in enumerate(images):
-                    try:
-                        xref = img_info[0]
+                # Skip pages that don't have any images (pure text pages,
+                # references, etc.). This filters out reference lists that
+                # accidentally mention "Fig. N."
+                if not page.get_images(full=True):
+                    continue
 
-                        # Skip if already processed (same image used multiple times)
-                        if xref in seen_images:
-                            continue
-                        seen_images.add(xref)
+                match = caption_re.search(text)
+                if not match:
+                    continue
 
-                        # Extract image
-                        base_image = doc.extract_image(xref)
-                        if not base_image:
-                            continue
+                fig_num = match.group(1)
+                caption_snippet = match.group(2).strip()
 
-                        image_bytes = base_image["image"]
-                        image_ext = base_image.get("ext", "png")
+                if fig_num in seen_fig_nums:
+                    continue
+                seen_fig_nums.add(fig_num)
 
-                        # Get image dimensions
-                        width = base_image.get("width", 0)
-                        height = base_image.get("height", 0)
+                # Render the page at 2× resolution — high enough for the
+                # HTML report without exploding file size.
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                filename = f"fig_{fig_num}.png"
+                filepath = paper_dir / filename
+                pix.save(str(filepath))
 
-                        # Skip small images (icons, logos, decorations)
-                        # Most figures are at least 200x200 pixels
-                        if width < 200 or height < 200:
-                            continue
+                # Grab the full caption chunk (up to ~3000 chars) so the LLM
+                # has something to translate later.
+                cap_start = match.start()
+                caption = text[cap_start:cap_start + 3000].strip()
 
-                        # Skip very small file sizes (likely icons)
-                        if len(image_bytes) < 5000:  # 5KB minimum
-                            continue
+                figures.append({
+                    "figure_num": fig_num,
+                    "path": str(filepath),
+                    "caption": caption,
+                    "source": "pdf",
+                })
+                print(f"[PDF] Rendered Figure {fig_num} from page {page_num + 1}")
 
-                        fig_num += 1
-                        filename = f"fig_{fig_num}.{image_ext}"
-                        filepath = paper_dir / filename
-
-                        # Save image
-                        with open(filepath, "wb") as f:
-                            f.write(image_bytes)
-
-                        figures.append({
-                            "figure_num": str(fig_num),
-                            "path": str(filepath),
-                            "caption": f"Figure from page {page_num + 1}",
-                            "source": "pdf"
-                        })
-                        print(f"[PDF] Extracted Figure {fig_num} ({width}x{height}) from page {page_num + 1}")
-
-                        # Limit to 10 figures max
-                        if fig_num >= 10:
-                            break
-
-                    except Exception as e:
-                        print(f"[PDF] Error extracting image: {e}")
-                        continue
-
-                if fig_num >= 10:
+                if len(figures) >= 15:
                     break
 
             doc.close()
-            print(f"[PDF] Extracted {len(figures)} figures from PDF")
+            # Sort by numeric figure number for stable ordering
+            figures.sort(key=lambda f: int(f["figure_num"]))
+            print(f"[PDF] Rendered {len(figures)} figures from PDF")
 
         except Exception as e:
             print(f"[PDF] Error processing PDF: {e}")
@@ -635,14 +638,15 @@ class PaperContentFetcher:
             if figures:
                 source = "journal"
 
-        # PDF fallback is intentionally disabled.
-        # PyMuPDF extracts every embedded image, which on many journal PDFs
-        # (e.g., eLife) means panels and sub-panels of one figure get split
-        # into separate "figures" with wrong numbering — e.g., Figure 1D
-        # appears as our "Figure 1" and two sub-panels of Figure 6A appear
-        # as "Figure 2" and "Figure 3". Showing nothing is better than
-        # showing mislabeled images. The figure explanation section will
-        # still render from extracted legends in the body text.
+        # Method 5: Last-resort PDF page rendering. Uses the "Fig. N" caption
+        # in the PDF text to identify which pages carry figures, then renders
+        # the whole page (preserving multi-panel composite layout). Much safer
+        # than the old embedded-image extraction which split panels apart.
+        if not figures and paper.local_pdf_path:
+            print(f"[ContentFetcher] Trying PDF page rendering: {paper.local_pdf_path}")
+            figures = self.figure_fetcher.fetch_from_pdf(paper.local_pdf_path, paper.title)
+            if figures:
+                source = "pdf"
 
         # Fetch text content (from abstract if no other source)
         if paper.abstract:
