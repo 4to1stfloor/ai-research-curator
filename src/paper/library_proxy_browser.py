@@ -104,8 +104,26 @@ class BrowserLibraryProxy:
     # -----------------------------------------------------------------
     # Download PDF given the PII (Elsevier's article identifier)
     # -----------------------------------------------------------------
-    def download_pdf_from_pii(self, pii: str, dest: Path) -> bool:
-        """Log in and download the Cell/Elsevier PDF for a given PII."""
+    def download_pdf_from_pii(self, pii: str, dest: Path, max_attempts: int = 3) -> bool:
+        """Log in and download the Cell/Elsevier PDF for a given PII.
+
+        The library proxy occasionally times out under automated access even
+        with the human-like pacing — retry a few times with growing delays
+        before giving up. Each retry is a fresh browser session so cookie /
+        fingerprint state doesn't compound.
+        """
+        for attempt in range(1, max_attempts + 1):
+            if attempt > 1:
+                # Give the proxy a chance to release any temporary flag
+                cooldown = 45 * (attempt - 1)  # 45s, 90s
+                print(f"[LibProxy-Browser] Retry {attempt}/{max_attempts} after {cooldown}s cooldown")
+                time.sleep(cooldown)
+            if self._download_pdf_from_pii_once(pii, dest):
+                return True
+        return False
+
+    def _download_pdf_from_pii_once(self, pii: str, dest: Path) -> bool:
+        """One attempt at the browser login + download flow."""
         if not self.is_available():
             print("[LibProxy-Browser] Not available (missing Xvfb/Chrome/selenium)")
             return False

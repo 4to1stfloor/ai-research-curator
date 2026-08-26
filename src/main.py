@@ -457,13 +457,6 @@ class PaperDigestPipeline:
                 # Initialize processing info for this paper
                 proc_info = ProcessingInfo()
 
-                # Determine if this is a non-OA abstract-only paper
-                # If download_papers actually landed a PDF (e.g. via the
-                # nature.com fallback), treat this paper as OA regardless of
-                # what PubMed reported — we can extract the body text and
-                # figures the same way we would for any OA paper.
-                is_non_oa = not (paper.is_open_access or paper.pdf_url or paper.local_pdf_path)
-
                 # Fetch abstract from DOI if not available or too short (e.g., RSS source)
                 if paper.doi and (not paper.abstract or len(paper.abstract) < 500):
                     fetched_abstract = self.content_fetcher.fetch_abstract_from_doi(paper.doi)
@@ -476,14 +469,15 @@ class PaperDigestPipeline:
                     figures = []
                     figure_legends = []
 
-                    if is_non_oa:
-                        # Non-OA: abstract 기반 요약만 (PDF/Figure 스킵)
-                        proc_info.pdf_downloaded = False
-                        proc_info.full_text_available = False
-                        proc_info.abstract_only = True
-                        proc_info.add_note("Non-OA 논문 - Abstract 기반 분석")
-                    else:
-                        # OA: 기존 전체 처리 플로우
+                    # Always try to fetch full content. The old is_non_oa branch
+                    # skipped fetch_content entirely for anything without a
+                    # PMCID or local PDF — but Cell papers routinely land on
+                    # PMC later, and content_fetcher already tries PMC → DOI →
+                    # journal → PDF in order and falls through gracefully when
+                    # none work. Skipping the whole thing meant papers like
+                    # 2026-08-26 #4 (Cell, PMC-registered but no PMCID in RSS)
+                    # were forced to Abstract Only for no reason.
+                    if True:
                         # Method 1: Try web-based figure extraction first (more accurate)
                         console.print(f"[cyan]Fetching figures from web: {paper.title[:40]}...[/cyan]")
                         content = self.content_fetcher.fetch_content(paper)
