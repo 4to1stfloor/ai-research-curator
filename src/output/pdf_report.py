@@ -805,6 +805,17 @@ class PDFReportGenerator:
         # Split into paragraphs by blank lines
         paragraphs = re.split(r'\n\s*\n', summary.strip())
 
+        # If everything landed in one blob (LLM skipped blank lines and the
+        # ensure_paragraph_breaks heuristic couldn't split it), force a break
+        # after the first sentence so the CSS `.summary-prose p:first-child`
+        # (blue highlight for the one-line overview) doesn't dye the entire
+        # body blue. Any sentence-ending "다."/"니다."/"입니다."/"." works.
+        if len(paragraphs) == 1 and len(paragraphs[0]) > 400:
+            blob = ' '.join(paragraphs[0].split())
+            m = re.search(r'^(.{20,400}?[다입니가나까요][.。])\s+(.+)$', blob, re.DOTALL)
+            if m:
+                paragraphs = [m.group(1), m.group(2)]
+
         html_parts = []
         for para in paragraphs:
             # Clean up: join lines within a paragraph, strip whitespace

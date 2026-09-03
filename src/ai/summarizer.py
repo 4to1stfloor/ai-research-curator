@@ -187,6 +187,11 @@ def ensure_paragraph_breaks(text: str) -> str:
     result_paragraphs = []
     current = []
 
+    # Recognize the one-line overview by any sentence-ending pattern common
+    # in Korean summaries — 연구입니다 / trial입니다 / study입니다 / 분석입니다 /
+    # 보고입니다 / etc. Anything ending in 입니다 / 습니다 counts.
+    overview_end = re.compile(r'입니다[.。]?\s*$|습니다[.。]?\s*$')
+
     for line in lines:
         line = line.strip()
         if not line:
@@ -199,16 +204,15 @@ def ensure_paragraph_breaks(text: str) -> str:
         if not current:
             current.append(line)
             # Check if this line alone is the one-line overview
-            if re.search(r'연구입니다[.。]?\s*$', line):
+            if overview_end.search(line):
                 result_paragraphs.append(' '.join(current))
                 current = []
             continue
 
         # Check if this line starts a new paragraph topic
         # (after the overview, detect transitions to background/findings/significance)
-        if len(result_paragraphs) >= 1 and re.search(
-            r'(연구입니다|습니다|었습니다|입니다)[.。]?\s*$', ' '.join(current)
-        ) and len(' '.join(current)) > 100:
+        if len(result_paragraphs) >= 1 and overview_end.search(' '.join(current)) \
+                and len(' '.join(current)) > 100:
             result_paragraphs.append(' '.join(current))
             current = [line]
         else:
