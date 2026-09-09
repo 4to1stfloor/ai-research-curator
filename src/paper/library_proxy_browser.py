@@ -178,8 +178,16 @@ class BrowserLibraryProxy:
             self._pause(0.5, 1.0)
 
             driver.execute_script("document.forms.LOGIN.submit()")
+            # The proxy rewrites hostnames by replacing dots with hyphens, so a
+            # successful login lands on e.g.
+            #   https://pubmed-ncbi-nlm-nih-gov-ssl.libproxy.ncc.re.kr/
+            # Matching on the original "ncbi.nlm.nih.gov" spelling never fires.
+            # Wait for any of the rewritten markers, or the proxy's error page.
             WebDriverWait(driver, 60).until(
-                lambda d: "ncbi.nlm.nih.gov" in d.current_url or "sciencedirect" in d.current_url
+                lambda d: any(
+                    marker in d.current_url.lower()
+                    for marker in ("pubmed", "ncbi", "sciencedirect", "common/error")
+                )
             )
 
             if "ncc.re.kr/common/error" in driver.current_url:
