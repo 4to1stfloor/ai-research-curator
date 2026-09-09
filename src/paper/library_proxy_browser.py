@@ -226,11 +226,17 @@ class BrowserLibraryProxy:
             print(f"[LibProxy-Browser] Clicked: {pdf_href[:120]}")
 
             # --- 4. Wait for the download to complete ---
-            timeout = 120  # generous for large PDFs
-            for _ in range(timeout):
+            # Elsevier renders the PDF server-side before the transfer starts,
+            # which can take a while for large papers — especially when we've
+            # just hammered the proxy for a previous article. Give it 5 minutes
+            # and report progress so a timeout is diagnosable from the log.
+            timeout = 300
+            last_note = 0
+            for elapsed in range(1, timeout + 1):
                 time.sleep(1)
                 pdfs = list(self.download_dir.glob("*.pdf"))
                 partials = list(self.download_dir.glob("*.crdownload"))
+
                 if pdfs and not partials:
                     src = pdfs[0]
                     # Sanity-check magic bytes
@@ -244,7 +250,18 @@ class BrowserLibraryProxy:
                     print(f"[LibProxy-Browser] Downloaded: {dest.name} ({dest.stat().st_size // 1024} KB)")
                     return True
 
-            print("[LibProxy-Browser] Download timeout")
+                # Progress note every 60s so a stall is distinguishable from
+                # "transfer in progress" when reading cron logs later.
+                if elapsed - last_note >= 60:
+                    last_note = elapsed
+                    if partials:
+                        size_kb = sum(f.stat().st_size for f in partials) // 1024
+                        print(f"[LibProxy-Browser] …downloading ({elapsed}s, {size_kb} KB so far)")
+                    else:
+                        print(f"[LibProxy-Browser] …waiting for transfer to start ({elapsed}s)")
+
+            leftover = [f.name for f in self.download_dir.iterdir() if f.is_file()]
+            print(f"[LibProxy-Browser] Download timeout after {timeout}s (dir contents: {leftover or 'empty'})")
             return False
 
         except Exception as e:
@@ -279,17 +296,16 @@ class BrowserLibraryProxy:
         return self.download_pdf_from_pii(pii, dest)
 
     def _doi_to_pii(self, doi: str) -> Optional[str]:
-        """Resolve DOI → PII by hitting linkinghub.elsevier.com (small HTML page)."""
+        """Resolve DOI → PII via the doi.org redirect to linkinghub.elsevier.com.
+
+        Note: do NOT probe linkinghub directly with an empty /retrieve/pii/
+        path. An earlier version issued that request and discarded the result;
+        Elsevier appears to flag the client for it, after which the browser
+        PDF download silently never starts (the click succeeds but no transfer
+        begins). Going through doi.org is both sufficient and well-behaved.
+        """
         import requests
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         try:
-            r = requests.get(
-                f"https://linkinghub.elsevier.com/retrieve/pii/",
-                params={},  # DOI-based resolution: use doi.org redirect
-                allow_redirects=False, timeout=15,
-            )
-            # Better: use doi.org which redirects to linkinghub
             r = requests.get(f"https://doi.org/{doi}", allow_redirects=True, timeout=15)
             m = re.search(r"pii[/:](S[\w]+)", r.url)
             if m:
