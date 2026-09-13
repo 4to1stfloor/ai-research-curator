@@ -162,6 +162,16 @@ class BrowserLibraryProxy:
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
 
+            # Force the download target via DevTools. The `prefs` route above
+            # works when the process is attached to a terminal but is silently
+            # ignored when detached (cron, nohup, Claude Code background tasks):
+            # the PDF link click succeeds yet no transfer ever begins. The CDP
+            # command is honoured regardless of how the process was launched.
+            driver.execute_cdp_cmd(
+                "Page.setDownloadBehavior",
+                {"behavior": "allow", "downloadPath": str(self.download_dir)},
+            )
+
             # --- 1. Log in via the proxy ---
             driver.get(f"{self.proxy_base}/link.n2s?url=https://pubmed.ncbi.nlm.nih.gov/")
             WebDriverWait(driver, 30).until(
