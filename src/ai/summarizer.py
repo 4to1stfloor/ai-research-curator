@@ -571,6 +571,8 @@ FIGURE_EXPLANATION_PROMPT = """다음 논문의 Figure를 설명해주세요.
    - "Figure 파일이 아직 추출되지 않은 것 같습니다" (X)
    - "PDF에서 직접 Figure 내용을 확인했으므로" (X)
    금지! 바로 Figure 설명만 출력하세요.
+4. Figure 이미지 파일이나 PDF에는 접근할 수 없습니다. 파일을 찾거나 읽으려 하지 말고,
+   위의 Figure Legend 텍스트와 논문 요약만을 근거로 즉시 답변을 출력하세요.
 
 **필드 구성 (각 Figure마다 반드시 세 필드를 빠짐없이 출력하세요):**
 

@@ -1,5 +1,6 @@
 """Unified LLM client for Claude CLI, Claude API, OpenAI, Ollama, and Gemini."""
 
+import json
 import subprocess
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -65,13 +66,79 @@ class ClaudeCLIClient(BaseLLMClient):
 
         # 600s: figure explanations for 7-9 figure papers run to ~12k chars of
         # Korean prose; 300s was cutting it close under load.
+        #
+        # --tools "": we only want plain text back, never tool calls.
+        #
+        # --output-format stream-json (not plain text / json): when the CLI
+        # hits a mid-stream "model_refusal_fallback" (the primary model's
+        # output trips a refusal check, the CLI silently retries the whole
+        # prompt on a fallback model, which then answers in full), the final
+        # `result` field comes back EMPTY even though the fallback model's
+        # assistant message holds the complete answer. Observed 2026-09-16 on
+        # a 7-figure Science Advances paper: rc 0, stdout "", twice in a row.
+        # So we read the last assistant text block ourselves and only use
+        # `result` as a fallback.
         r = subprocess.run(
-            ["claude", "--print", "-p", full_prompt],
+            ["claude", "--print", "--tools", "", "--output-format", "stream-json",
+             "--verbose", "-p", full_prompt],
             capture_output=True, text=True, timeout=600
         )
         if r.returncode != 0:
             raise RuntimeError(f"Claude CLI error: {r.stderr}")
-        return r.stdout.strip()
+
+        events = []
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        if not events:
+            # Older CLI or unexpected output: treat stdout as text.
+            return r.stdout.strip()
+
+        result_ev = next((e for e in events if e.get("type") == "result"), {})
+        if result_ev.get("is_error"):
+            raise RuntimeError(
+                f"Claude CLI error: subtype={result_ev.get('subtype')} "
+                f"api_error_status={result_ev.get('api_error_status')} "
+                f"result={str(result_ev.get('result'))[:300]}"
+            )
+
+        # Last assistant message that actually contains text. Fallback blocks
+        # ({"type": "fallback", ...}) and the aborted primary-model message are
+        # skipped by construction because we take the LAST text-bearing one.
+        last_text = ""
+        for e in events:
+            if e.get("type") != "assistant":
+                continue
+            content = (e.get("message") or {}).get("content") or []
+            text = "".join(
+                b.get("text", "") for b in content
+                if isinstance(b, dict) and b.get("type") == "text"
+            ).strip()
+            if text:
+                last_text = text
+
+        fallbacks = [e for e in events
+                     if e.get("type") == "system" and "fallback" in str(e.get("subtype", ""))]
+        if fallbacks:
+            fb = fallbacks[-1]
+            print(f"[ClaudeCLI] model fallback: {fb.get('subtype')} trigger={fb.get('trigger')} "
+                  f"{fb.get('original_model')} -> {fb.get('fallback_model') or fb.get('new_model')}; "
+                  f"recovered {len(last_text)} chars from assistant stream")
+
+        result = (result_ev.get("result") or "").strip()
+        if not last_text and not result:
+            print(
+                "[ClaudeCLI] empty result: "
+                f"subtype={result_ev.get('subtype')} stop_reason={result_ev.get('stop_reason')} "
+                f"num_turns={result_ev.get('num_turns')} "
+                f"terminal_reason={result_ev.get('terminal_reason')}"
+            )
+        return last_text or result
 
 
 class GeminiClient(BaseLLMClient):
