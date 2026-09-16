@@ -633,26 +633,56 @@ class FigureExplanationGenerator:
             figure_legend=figure_legend or "(Figure legend 없음)"
         )
 
-        response = self.llm.generate(prompt)
-
-        # Post-process: remove AI preamble before first figure heading
         import re
-        fig_match = re.search(r'#+\s*Figure\s*\d', response)
-        if fig_match:
-            response = response[fig_match.start():]
-        else:
-            # No markdown figure headings - check for meta-commentary
-            meta_patterns = [
-                r'이미지를?\s*확인해야',
-                r'이미지\s*파일.*경로',
-                r'공유해\s*주시',
-                r'알려주시.*경로',
-                r'Figure\s*이미지.*확인',
-                r'정확한\s*설명.*드리기\s*어렵',
-            ]
-            if any(re.search(p, response) for p in meta_patterns):
+        meta_patterns = [
+            r'이미지를?\s*확인해야',
+            r'이미지\s*파일.*경로',
+            r'공유해\s*주시',
+            r'알려주시.*경로',
+            r'Figure\s*이미지.*확인',
+            r'정확한\s*설명.*드리기\s*어렵',
+        ]
+
+        def _clean(raw: str) -> str:
+            """Strip preamble; return "" if the reply is empty or meta-commentary."""
+            if not raw or not raw.strip():
                 return ""
-            # Otherwise keep as-is (LLM may have used different formatting)
+            fig_match = re.search(r'#+\s*Figure\s*\d', raw)
+            if fig_match:
+                return raw[fig_match.start():]
+            if any(re.search(p, raw) for p in meta_patterns):
+                return ""
+            return raw  # different formatting, keep as-is
+
+        # The CLI occasionally returns an empty body or a "please share the
+        # image" style reply for a perfectly good prompt (observed 2026-09-16
+        # on a 7-figure / 8.4k-char legend; identical re-run was fine). One
+        # retry recovers the vast majority of these. If it still fails, dump
+        # the raw replies so the cause is visible next time instead of a
+        # silent image-only figure section.
+        raw_replies = []
+        response = ""
+        for attempt in range(2):
+            raw = self.llm.generate(prompt)
+            raw_replies.append(raw)
+            response = _clean(raw)
+            if response:
+                break
+            print(f"[FigureExplanation] attempt {attempt + 1} returned empty/meta reply "
+                  f"({len(raw or '')} chars) for: {paper.title[:50]}")
+
+        if not response:
+            try:
+                from pathlib import Path
+                dbg_dir = Path("data/debug"); dbg_dir.mkdir(parents=True, exist_ok=True)
+                safe = re.sub(r'[^\w-]+', '_', paper.title)[:60]
+                dbg = dbg_dir / f"figexp_empty_{safe}.txt"
+                dbg.write_text("\n\n===== NEXT ATTEMPT =====\n\n".join(r or "<EMPTY>" for r in raw_replies),
+                               encoding="utf-8")
+                print(f"[FigureExplanation] raw replies saved to {dbg}")
+            except Exception:
+                pass
+            return ""
 
         # Post-process: fix incorrectly translated terminology first
         response = fix_summary_terminology(response)

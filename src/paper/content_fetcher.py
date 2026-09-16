@@ -453,6 +453,81 @@ class FigureFetcher:
 
         return figures
 
+    @staticmethod
+    def _figure_clip_rect(page, caption_char_offset: int, fitz):
+        """Bounding rect of the figure body on a caption-bearing page.
+
+        Takes the union of raster images and vector drawings, excluding the
+        header band (top ~8% of the page — publisher logo / running title),
+        the footer band (bottom ~5% — page number), and the caption text block
+        itself. Returns None (→ full page) if nothing usable is found, so the
+        caller degrades to the previous whole-page behaviour instead of
+        producing an empty crop.
+        """
+        try:
+            W, H = page.rect.width, page.rect.height
+            header_y = H * 0.08
+            footer_y = H * 0.95
+
+            # Locate the caption block so we know which side of it the figure is on.
+            caption_rect = None
+            text = page.get_text()
+            cap_prefix = text[caption_char_offset:caption_char_offset + 40].strip()[:25]
+            for b in page.get_text("blocks"):
+                bt = (b[4] or "").strip().replace("\n", " ")
+                if cap_prefix and bt.startswith(cap_prefix[:15]):
+                    caption_rect = fitz.Rect(b[0], b[1], b[2], b[3])
+                    break
+
+            # Exclude anything that *starts* inside the header or footer band.
+            # Publisher running-heads often include a tall colour bar hanging
+            # from y=0 down past the band boundary; testing "entirely above the
+            # band" let it through and dragged the crop up to the page top.
+            rects = []
+            for info in page.get_image_info():
+                r = fitz.Rect(info["bbox"])
+                if r.y0 < header_y or r.y0 >= footer_y:
+                    continue
+                if r.width < 8 or r.height < 8:
+                    continue
+                rects.append(r)
+            for d in page.get_drawings():
+                r = d.get("rect")
+                if r is None or r.is_empty:
+                    continue
+                if r.y0 < header_y or r.y0 >= footer_y:
+                    continue
+                # Ignore the caption's own rules/underlines if any
+                if caption_rect is not None and r.intersects(caption_rect) and r.height < 3:
+                    continue
+                rects.append(r)
+
+            if not rects:
+                return None
+
+            union = rects[0]
+            for r in rects[1:]:
+                union = union | r
+
+            # Keep only the side of the caption that holds the figure body.
+            if caption_rect is not None:
+                if caption_rect.y0 >= union.y0 + (union.height * 0.5):
+                    union.y1 = min(union.y1, caption_rect.y0 - 4)   # caption below figure
+                else:
+                    union.y0 = max(union.y0, caption_rect.y1 + 4)   # caption above figure
+
+            pad = 6
+            union = fitz.Rect(
+                max(0, union.x0 - pad), max(0, union.y0 - pad),
+                min(W, union.x1 + pad), min(H, union.y1 + pad),
+            )
+            # Sanity: reject degenerate crops (e.g. only a tiny icon survived).
+            if union.width < W * 0.3 or union.height < H * 0.15:
+                return None
+            return union
+        except Exception:
+            return None
+
     def fetch_from_pdf(self, pdf_path: str, paper_title: str) -> list[dict]:
         """
         Extract figures from a downloaded PDF by rendering pages that contain
@@ -521,9 +596,15 @@ class FigureFetcher:
                     continue
                 seen_fig_nums.add(fig_num)
 
-                # Render the page at 2× resolution — high enough for the
-                # HTML report without exploding file size.
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                # Crop to the figure itself rather than the whole page: drop the
+                # publisher header, the caption block, and the footer, keeping
+                # the union bbox of raster images + vector drawings in between.
+                # Falls back to the full page if geometry can't be worked out.
+                clip = self._figure_clip_rect(page, match.start(), fitz)
+
+                # Render at 2× resolution — high enough for the HTML report
+                # without exploding file size.
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=clip)
                 filename = f"fig_{fig_num}.png"
                 filepath = paper_dir / filename
                 pix.save(str(filepath))

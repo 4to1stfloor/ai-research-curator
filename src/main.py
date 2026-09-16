@@ -754,6 +754,17 @@ flowchart TD
                     pp.summary_korean,
                     legend_text
                 )
+                if not explanation or not explanation.strip():
+                    # generate_explanation returns "" when the LLM replied with
+                    # meta-commentary instead of figure content. Don't store it
+                    # and don't log it as a success — the report would silently
+                    # show images with no text and this is the only place we'd
+                    # ever notice.
+                    console.print(
+                        f"[yellow]Figure explanation came back EMPTY for {pp.paper.title[:40]}... "
+                        f"(legend was {len(legend_text)} chars) — figures will render without text[/yellow]"
+                    )
+                    continue
                 explanations[paper_id] = explanation
                 console.print(f"[green]Generated figure explanation for: {pp.paper.title[:40]}...[/green]")
 

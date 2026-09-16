@@ -63,9 +63,11 @@ class ClaudeCLIClient(BaseLLMClient):
         if system:
             full_prompt = f"{system}\n\n{prompt}"
 
+        # 600s: figure explanations for 7-9 figure papers run to ~12k chars of
+        # Korean prose; 300s was cutting it close under load.
         r = subprocess.run(
             ["claude", "--print", "-p", full_prompt],
-            capture_output=True, text=True, timeout=300
+            capture_output=True, text=True, timeout=600
         )
         if r.returncode != 0:
             raise RuntimeError(f"Claude CLI error: {r.stderr}")
