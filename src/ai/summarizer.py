@@ -175,33 +175,51 @@ def remove_meta_commentary(text: str) -> str:
 # prompt, the pipeline, whether the body text parsed - instead of about the
 # paper. These are addressed to the operator, not to the reader, so they must
 # never reach the report. Seen 2026-09-23 after a mid-response model swap.
+#
+# Each marker must be a phrase that only makes sense when the model is talking
+# to the operator. Single words like "파이프라인" or "프롬프트" are NOT safe:
+# papers use them too, and on 2026-09-23 a one-blob summary about a nematode
+# drug-defense system was deleted in full because the word appeared in it.
 _PROCESS_COMMENTARY_MARKERS = [
     r'짚어둘\s*점',
-    r'프롬프트의',
-    r'파이프라인',
-    r'summarizer\.py',
-    r'full\s*text\s*파싱',
-    r'파싱이\s*제대로',
-    r'점검해\s*보',
-    r'확인해\s*보시',
-    r'지어내지\s*말',
-    r'요건보다',
     r'안전\s*분류기',
     r'가능한\s*대안은',
+    r'summarizer\.py',
+    r'프롬프트(?:의|에서|에는)\s*[^.\n]{0,40}(?:요건|규칙|지시|요구)',
+    r'(?:full\s*text|본문)\s*파싱이?\s*[^.\n]{0,30}(?:제대로|정상|되고\s*있)',
+    r'(?:점검|확인)해\s*보시',
     r'알려주시면',
+    r'지어내지\s*말\s*것',
+    r'요청하신\s*[^.\n]{0,20}(?:구조|형식|형태)',
+    r'다시\s*작성할\s*수\s*없',
 ]
 
 
 def strip_process_commentary(text: str) -> str:
-    """Drop whole paragraphs that comment on the summarization job itself."""
+    """Drop whole paragraphs that comment on the summarization job itself.
+
+    Never returns less than a summary: if the markers would remove everything,
+    or most of the text, the filter is wrong about this paper and the original
+    is kept. Losing a stray sentence is better than shipping a blank section.
+    """
     import re
+
+    if not text or not text.strip():
+        return text
 
     paragraphs = re.split(r'\n\s*\n', text)
     kept = [
         p for p in paragraphs
         if not any(re.search(m, p, re.IGNORECASE) for m in _PROCESS_COMMENTARY_MARKERS)
     ]
-    return "\n\n".join(kept).strip()
+    result = "\n\n".join(kept).strip()
+
+    if not kept:
+        # Every paragraph was commentary: there is no summary in here at all.
+        return ""
+    if len(result) < len(text.strip()) * 0.4:
+        return text.strip()
+    return result
 
 
 def select_body_for_summary(text: str, max_chars: int) -> str:
@@ -546,7 +564,22 @@ class PaperSummarizer:
                 abstract=paper.abstract or "(초록 없음)"
             )
 
-        # Generate summary
+        # Generate summary. A summary that survives post-processing as a stub
+        # means the reply was preamble/commentary rather than content, so try
+        # again rather than shipping a near-empty 연구 개요 section.
+        summary = ""
+        for attempt in range(2):
+            summary = self._summarize_once(prompt)
+            if len(summary) >= 300:
+                break
+            print(f"[Summarizer] attempt {attempt + 1} produced only {len(summary)} chars "
+                  f"for: {paper.title[:50]}")
+        if len(summary) < 300:
+            print(f"[Summarizer] WARNING: short summary kept for: {paper.title[:60]}")
+        return summary
+
+    def _summarize_once(self, prompt: str) -> str:
+        """One generate + post-process pass."""
         summary = self.llm.generate(prompt, system=SUMMARIZE_SYSTEM_PROMPT)
 
         # Post-process: fix incorrectly translated terminology first
@@ -561,11 +594,16 @@ class PaperSummarizer:
         # Remove AI meta-commentary about input quality/completeness
         summary = remove_meta_commentary(summary)
 
+        # Ensure prose paragraphs are separated by blank lines FIRST: the
+        # commentary filter works paragraph by paragraph, and on a single
+        # unbroken blob it is all-or-nothing.
+        summary = ensure_paragraph_breaks(summary)
+
         # Drop whole paragraphs that talk about the summarization job itself
         summary = strip_process_commentary(summary)
 
-        # Ensure prose paragraphs are separated by blank lines
-        summary = ensure_paragraph_breaks(summary)
+        # Trailing horizontal rule the model sometimes signs off with
+        summary = re.sub(r'\n\s*-{3,}\s*$', '', summary).strip()
 
         return summary
 
