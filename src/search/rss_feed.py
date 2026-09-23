@@ -105,6 +105,7 @@ class RSSFeedSearcher:
             elif "description" in entry:
                 abstract = entry["description"]
             # Clean HTML tags and RSS metadata
+            abstract = self._drop_leading_byline(abstract)
             abstract = self._strip_html(abstract)
             abstract = self._clean_abstract(abstract, journal)
 
@@ -169,6 +170,20 @@ class RSSFeedSearcher:
         except Exception as e:
             print(f"Error parsing RSS entry: {e}")
             return None
+
+    @staticmethod
+    def _drop_leading_byline(raw: str) -> str:
+        """Remove the author byline PLOS feeds put before the abstract.
+
+        PLOS Atom summaries open with "<p>by Author A, Author B</p>" and then
+        the abstract. It has to go before the tags are stripped: _strip_html
+        collapses whitespace, after which there is no way to tell where the
+        author list ends and the abstract begins. Left in, it became the first
+        "sentence" of the abstract and got translated as "저자: ...".
+        """
+        import re
+        return re.sub(r'^\s*<p>\s*by\s+.*?</p>', '', raw or '',
+                      count=1, flags=re.DOTALL | re.IGNORECASE)
 
     def _strip_html(self, text: str) -> str:
         """Remove HTML tags from text."""
