@@ -1,6 +1,8 @@
 """Unified LLM client for Claude CLI, Claude API, OpenAI, Ollama, and Gemini."""
 
 import json
+import os
+import re
 import subprocess
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -57,34 +59,57 @@ class ClaudeCLIClient(BaseLLMClient):
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
-    @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=2, max=30))
-    def generate(self, prompt: str, system: Optional[str] = None) -> str:
-        """Generate text using Claude CLI (claude --print -p)."""
-        full_prompt = prompt
-        if system:
-            full_prompt = f"{system}\n\n{prompt}"
+    # Replies that are the assistant talking ABOUT the request instead of doing
+    # it. These show up when the CLI retries a flagged prompt on a fallback
+    # model: the fallback model sees the retracted turn and comments on it.
+    # Such a reply must never reach the report.
+    _META_REPLY_PATTERNS = [
+        r"안전\s*분류기", r"safety classifier",
+        r"이전\s*응답이.{0,20}중단",
+        r"다시\s*작성할\s*수\s*없",
+        r"가능한\s*대안은",
+        r"도와드릴\s*수\s*없",
+        r"요청을\s*처리할\s*수\s*없",
+        r"I (?:can't|cannot|won't) (?:help|assist|provide)",
+    ]
+
+    # The model the CLI fell back to, remembered for the rest of the process so
+    # we stop paying for a flagged first attempt on every single call.
+    _pinned_model: Optional[str] = None
+
+    @classmethod
+    def _is_meta_reply(cls, text: str) -> bool:
+        head = (text or "")[:600]
+        return any(re.search(p, head, re.IGNORECASE) for p in cls._META_REPLY_PATTERNS)
+
+    # Model to pin to when the default one refuses. Science/medicine papers
+    # (oncolytic virus, drug-defense, immunology) routinely trip the default
+    # model's classifier; this one handles them. Override with CLAUDE_FALLBACK_MODEL.
+    _FALLBACK_MODEL = os.environ.get("CLAUDE_FALLBACK_MODEL", "claude-opus-5")
+
+    @staticmethod
+    def _run_cli(full_prompt: str, model: Optional[str] = None) -> tuple:
+        """Run the CLI once. Returns (text, swap_to_model_or_None, refused).
+
+        --tools "": we only want plain text back, never tool calls.
+        --output-format stream-json: the final `result` field comes back EMPTY
+        whenever the CLI swapped models mid-response, so we read the assistant
+        messages ourselves and detect the swap.
+        """
+        cmd = ["claude", "--print", "--tools", "", "--output-format", "stream-json",
+               "--verbose"]
+        if model:
+            cmd += ["--model", model]
+        cmd += ["-p", full_prompt]
 
         # 600s: figure explanations for 7-9 figure papers run to ~12k chars of
         # Korean prose; 300s was cutting it close under load.
-        #
-        # --tools "": we only want plain text back, never tool calls.
-        #
-        # --output-format stream-json (not plain text / json): when the CLI
-        # hits a mid-stream "model_refusal_fallback" (the primary model's
-        # output trips a refusal check, the CLI silently retries the whole
-        # prompt on a fallback model, which then answers in full), the final
-        # `result` field comes back EMPTY even though the fallback model's
-        # assistant message holds the complete answer. Observed 2026-09-16 on
-        # a 7-figure Science Advances paper: rc 0, stdout "", twice in a row.
-        # So we read the last assistant text block ourselves and only use
-        # `result` as a fallback.
-        r = subprocess.run(
-            ["claude", "--print", "--tools", "", "--output-format", "stream-json",
-             "--verbose", "-p", full_prompt],
-            capture_output=True, text=True, timeout=600
-        )
-        if r.returncode != 0:
-            raise RuntimeError(f"Claude CLI error: {r.stderr}")
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        # A refusal exits non-zero but still writes the full event stream, so
+        # parse first and only treat it as a hard error if there is nothing
+        # to read.
+        if r.returncode != 0 and not r.stdout.strip():
+            raise RuntimeError(f"Claude CLI error (rc={r.returncode}): {r.stderr[:500]}")
 
         events = []
         for line in r.stdout.splitlines():
@@ -97,19 +122,20 @@ class ClaudeCLIClient(BaseLLMClient):
                 continue
         if not events:
             # Older CLI or unexpected output: treat stdout as text.
-            return r.stdout.strip()
+            return r.stdout.strip(), None, False
 
         result_ev = next((e for e in events if e.get("type") == "result"), {})
-        if result_ev.get("is_error"):
+        refused = result_ev.get("stop_reason") == "refusal" or any(
+            e.get("type") == "system" and "refusal" in str(e.get("subtype", ""))
+            for e in events
+        )
+        if result_ev.get("is_error") and not refused:
             raise RuntimeError(
                 f"Claude CLI error: subtype={result_ev.get('subtype')} "
                 f"api_error_status={result_ev.get('api_error_status')} "
                 f"result={str(result_ev.get('result'))[:300]}"
             )
 
-        # Last assistant message that actually contains text. Fallback blocks
-        # ({"type": "fallback", ...}) and the aborted primary-model message are
-        # skipped by construction because we take the LAST text-bearing one.
         last_text = ""
         for e in events:
             if e.get("type") != "assistant":
@@ -122,23 +148,72 @@ class ClaudeCLIClient(BaseLLMClient):
             if text:
                 last_text = text
 
-        fallbacks = [e for e in events
-                     if e.get("type") == "system" and "fallback" in str(e.get("subtype", ""))]
-        if fallbacks:
-            fb = fallbacks[-1]
-            print(f"[ClaudeCLI] model fallback: {fb.get('subtype')} trigger={fb.get('trigger')} "
-                  f"{fb.get('original_model')} -> {fb.get('fallback_model') or fb.get('new_model')}; "
-                  f"recovered {len(last_text)} chars from assistant stream")
+        swap_to = None
+        for e in events:
+            if e.get("type") == "system" and "fallback" in str(e.get("subtype", "")):
+                swap_to = e.get("fallback_model") or e.get("new_model") or swap_to
 
-        result = (result_ev.get("result") or "").strip()
-        if not last_text and not result:
-            print(
-                "[ClaudeCLI] empty result: "
-                f"subtype={result_ev.get('subtype')} stop_reason={result_ev.get('stop_reason')} "
-                f"num_turns={result_ev.get('num_turns')} "
-                f"terminal_reason={result_ev.get('terminal_reason')}"
-            )
-        return last_text or result
+        text = last_text or (result_ev.get("result") or "").strip()
+        return text, swap_to, refused
+
+    def generate(self, prompt: str, system: Optional[str] = None) -> str:
+        """Generate text using Claude CLI, retrying past mid-response model swaps.
+
+        When the primary model's output trips the CLI's refusal check, the CLI
+        retracts that turn and retries on a fallback model *within the same
+        session*. The fallback model then sees the retracted turn and often
+        replies about it ("the previous response was interrupted...") instead of
+        answering, which is how meta-commentary ended up in the 2026-09-16 and
+        2026-09-23 reports. The cure is to throw that response away and re-run
+        the prompt in a FRESH session pinned to the fallback model, which gets a
+        clean answer. We remember the pinned model for later calls in this run.
+        """
+        full_prompt = prompt
+        if system:
+            full_prompt = f"{system}\n\n{prompt}"
+
+        cls = type(self)
+        last_reason = "unknown"
+        for attempt in range(3):
+            model = cls._pinned_model
+            text, swap_to, refused = self._run_cli(full_prompt, model)
+
+            if swap_to and swap_to != model:
+                # Session was contaminated by the retracted turn. Pin and redo.
+                cls._pinned_model = swap_to
+                print(f"[ClaudeCLI] model swapped mid-response -> {swap_to}; "
+                      f"discarding {len(text)} chars and re-running on a clean session")
+                last_reason = f"model swapped to {swap_to}"
+                continue
+
+            if refused:
+                if model != cls._FALLBACK_MODEL:
+                    cls._pinned_model = cls._FALLBACK_MODEL
+                    print(f"[ClaudeCLI] {model or 'default model'} refused this paper; "
+                          f"re-running on {cls._FALLBACK_MODEL}")
+                    last_reason = f"refused by {model or 'default model'}"
+                    continue
+                last_reason = f"refused by {model}"
+                print(f"[ClaudeCLI] {model} also refused (attempt {attempt + 1})")
+                continue
+
+            if not text:
+                print(f"[ClaudeCLI] attempt {attempt + 1} returned no text "
+                      f"(model={model or 'default'})")
+                last_reason = "empty reply"
+                continue
+
+            if self._is_meta_reply(text):
+                print(f"[ClaudeCLI] attempt {attempt + 1} returned meta-commentary "
+                      f"instead of content ({len(text)} chars, model={model or 'default'})")
+                last_reason = "meta-commentary reply"
+                continue
+
+            return text
+
+        raise RuntimeError(
+            f"Claude CLI produced no usable output after 3 attempts ({last_reason})"
+        )
 
 
 class GeminiClient(BaseLLMClient):

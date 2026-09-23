@@ -511,11 +511,24 @@ class PaperDigestPipeline:
                             proc_info.add_note("PDF 다운로드 완료")
 
                             parsed = self.pdf_parser.parse_paper(paper, extract_figures=False)
-                            if not body_text and parsed.get("text"):
-                                body_text = parsed.get("text", "")
+                            pdf_text = parsed.get("text", "") or ""
+
+                            # Take whichever source actually carries the paper.
+                            # The web text is often just the landing page's
+                            # abstract (Science Advances, 2026-09-23 #1: the
+                            # summary had nothing from results/discussion even
+                            # though the downloaded PDF held 110k chars with
+                            # both sections). "Web first" made that PDF unused.
+                            if pdf_text and len(pdf_text) > len(body_text) * 1.5:
+                                if body_text:
+                                    proc_info.add_note(
+                                        f"PDF 본문 채택 ({len(pdf_text)}자 > 웹 {len(body_text)}자)"
+                                    )
+                                else:
+                                    proc_info.add_note("PDF에서 본문 추출 완료")
+                                body_text = pdf_text
                                 proc_info.full_text_available = True
                                 proc_info.abstract_only = False
-                                proc_info.add_note("PDF에서 본문 추출 완료")
 
                             if parsed.get("figure_legends"):
                                 figure_legends.extend(parsed.get("figure_legends", []))

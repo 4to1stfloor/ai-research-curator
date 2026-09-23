@@ -99,6 +99,10 @@ def remove_llm_preamble(text: str) -> str:
         r'^[^\n]*요약해[^\n]*드리겠습니다[.!]?\s*',
         # "전문가 관점에서" pattern
         r'^[^\n]*전문가\s*관점에서[^\n]*[.!]?\s*',
+        # "<제목> 논문을 요청하신 4문단 구조로 요약했습니다." - the model announcing
+        # what it just did. Seen 2026-09-23 after a mid-response model swap.
+        r'^[^\n]{0,300}?(?:요청하신|말씀하신)[^\n]{0,120}?'
+        r'(?:요약|정리|작성)했습니다[.!]?\s*',
         # Horizontal rule after preamble
         r'^-{3,}\s*',
         # Empty lines at start
@@ -165,6 +169,77 @@ def remove_meta_commentary(text: str) -> str:
     result = re.sub(r'\n{3,}', '\n\n', result)
 
     return result.strip()
+
+
+# Paragraphs where the model talks about the summarization job itself - its own
+# prompt, the pipeline, whether the body text parsed - instead of about the
+# paper. These are addressed to the operator, not to the reader, so they must
+# never reach the report. Seen 2026-09-23 after a mid-response model swap.
+_PROCESS_COMMENTARY_MARKERS = [
+    r'짚어둘\s*점',
+    r'프롬프트의',
+    r'파이프라인',
+    r'summarizer\.py',
+    r'full\s*text\s*파싱',
+    r'파싱이\s*제대로',
+    r'점검해\s*보',
+    r'확인해\s*보시',
+    r'지어내지\s*말',
+    r'요건보다',
+    r'안전\s*분류기',
+    r'가능한\s*대안은',
+    r'알려주시면',
+]
+
+
+def strip_process_commentary(text: str) -> str:
+    """Drop whole paragraphs that comment on the summarization job itself."""
+    import re
+
+    paragraphs = re.split(r'\n\s*\n', text)
+    kept = [
+        p for p in paragraphs
+        if not any(re.search(m, p, re.IGNORECASE) for m in _PROCESS_COMMENTARY_MARKERS)
+    ]
+    return "\n\n".join(kept).strip()
+
+
+def select_body_for_summary(text: str, max_chars: int) -> str:
+    """Pick the part of a full text that a summary actually needs.
+
+    A plain head-truncation of a 110k-char PDF keeps the abstract, intro and the
+    first slice of results, and throws away the discussion - which is where the
+    authors state what the results mean. Reports built that way read like a
+    translated abstract (2026-09-23). So: drop the reference list, then keep the
+    opening plus the discussion/conclusion when the text does not fit.
+    """
+    import re
+
+    if not text:
+        return text
+
+    # References/supplementary tails carry no argument, only citations.
+    refs = re.search(
+        r'\n\s*(?:REFERENCES\s+AND\s+NOTES|REFERENCES|LITERATURE\s+CITED|'
+        r'Bibliography|참고\s*문헌)\s*\n',
+        text, re.IGNORECASE
+    )
+    if refs and refs.start() > len(text) * 0.3:
+        text = text[:refs.start()]
+
+    if len(text) <= max_chars:
+        return text
+
+    disc = re.search(r'\n\s*(?:\d+\.?\s*)?(?:DISCUSSION|Discussion|'
+                     r'CONCLUSIONS?|Conclusions?)\s*\n', text)
+    if disc and disc.start() > max_chars * 0.4:
+        head_budget = int(max_chars * 0.6)
+        tail_budget = max_chars - head_budget
+        return (text[:head_budget].rstrip()
+                + "\n\n[...본문 중략...]\n\n"
+                + text[disc.start():disc.start() + tail_budget])
+
+    return text[:max_chars]
 
 
 def ensure_paragraph_breaks(text: str) -> str:
@@ -435,7 +510,7 @@ class PaperSummarizer:
         self,
         paper: Paper,
         body_text: Optional[str] = None,
-        max_body_chars: int = 20000
+        max_body_chars: int = 40000
     ) -> str:
         """
         Summarize a paper.
@@ -452,8 +527,8 @@ class PaperSummarizer:
 
         # Choose prompt based on body text availability
         if body_text and len(body_text.strip()) > 100:
-            # Full prompt with body text (truncate silently without marker)
-            body = body_text[:max_body_chars]
+            # Full prompt with body text: keep the discussion, drop the refs.
+            body = select_body_for_summary(body_text, max_body_chars)
 
             prompt = SUMMARIZE_PROMPT_FULL.format(
                 title=paper.title,
@@ -485,6 +560,9 @@ class PaperSummarizer:
 
         # Remove AI meta-commentary about input quality/completeness
         summary = remove_meta_commentary(summary)
+
+        # Drop whole paragraphs that talk about the summarization job itself
+        summary = strip_process_commentary(summary)
 
         # Ensure prose paragraphs are separated by blank lines
         summary = ensure_paragraph_breaks(summary)
@@ -646,15 +724,22 @@ class FigureExplanationGenerator:
         ]
 
         def _clean(raw: str) -> str:
-            """Strip preamble; return "" if the reply is empty or meta-commentary."""
+            """Strip preamble; return "" unless the reply is real figure content.
+
+            A reply without a single "#### Figure N" heading is not a figure
+            explanation - it is the model talking about the request. The report
+            renders nothing from it, which is how papers #1 and #5 shipped with
+            images and no text on 2026-09-23. Reject it so the retry runs.
+            """
             if not raw or not raw.strip():
                 return ""
             fig_match = re.search(r'#+\s*Figure\s*\d', raw)
-            if fig_match:
-                return raw[fig_match.start():]
-            if any(re.search(p, raw) for p in meta_patterns):
+            if not fig_match:
                 return ""
-            return raw  # different formatting, keep as-is
+            cleaned = raw[fig_match.start():]
+            if any(re.search(p, cleaned) for p in meta_patterns):
+                return ""
+            return cleaned
 
         # The CLI occasionally returns an empty body or a "please share the
         # image" style reply for a perfectly good prompt (observed 2026-09-16
