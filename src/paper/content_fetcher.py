@@ -742,9 +742,12 @@ class PaperContentFetcher:
             if figures:
                 source = "pdf"
 
-        # Fetch text content (from abstract if no other source)
-        if paper.abstract:
-            text = paper.abstract
+        # No body text comes from these web sources: figures only. This used
+        # to return the abstract as "text", which main.py then treated as the
+        # full text - so a paper whose PDF could not be obtained was neither
+        # summarized from its body nor badged "Abstract Only" (2026-10-14 #1,
+        # NAR). Leave it empty; main.py takes the body from the PDF, and falls
+        # back to the abstract-only prompt and badge when there is none.
 
         return {
             "text": text,
@@ -1115,6 +1118,41 @@ class PaperContentFetcher:
         # Similar to DOI fetch but with BMC-specific patterns
         return self.figure_fetcher.fetch_from_doi(doi, paper_title)
 
+    @staticmethod
+    def _abstract_from_pubmed(doi: str) -> Optional[str]:
+        r = requests.get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+            params={"db": "pubmed", "term": f"{doi}[doi]", "retmode": "json"}, timeout=20,
+        ).json()
+        ids = r.get("esearchresult", {}).get("idlist", [])
+        if not ids:
+            return None
+        xml = requests.get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+            params={"db": "pubmed", "id": ids[0], "retmode": "xml"}, timeout=20,
+        ).text
+        parts = []
+        for m in re.finditer(r'<AbstractText([^>]*)>(.*?)</AbstractText>', xml, re.S):
+            label = re.search(r'Label="([^"]+)"', m.group(1))
+            body = re.sub(r'<[^>]+>', '', m.group(2)).strip()
+            if body:
+                parts.append(f"{label.group(1).title()}: {body}" if label else body)
+        import html as _html
+        return _html.unescape(" ".join(parts)) if parts else None
+
+    @staticmethod
+    def _abstract_from_europepmc(doi: str) -> Optional[str]:
+        r = requests.get(
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+            params={"query": f'DOI:"{doi}"', "resultType": "core", "format": "json"}, timeout=20,
+        ).json()
+        res = (r.get("resultList") or {}).get("result") or []
+        if not res:
+            return None
+        text = res[0].get("abstractText") or ""
+        text = re.sub(r'<[^>]+>', ' ', text)
+        return re.sub(r'\s+', ' ', text).strip() or None
+
     def fetch_abstract_from_doi(self, doi: str) -> Optional[str]:
         """
         Fetch abstract from DOI by resolving to publisher page.
@@ -1131,6 +1169,19 @@ class PaperContentFetcher:
         # Remove 'doi:' prefix if present
         if doi.startswith('doi:'):
             doi = doi[4:]
+
+        # Structured sources first. Publisher pages are often bot-walled
+        # (science.org, academic.oup.com answer 403), which left Science
+        # papers from RSS with "Volume 12, Issue 41..." as their abstract.
+        for name, fn in (("PubMed", self._abstract_from_pubmed),
+                         ("Europe PMC", self._abstract_from_europepmc)):
+            try:
+                text = fn(doi)
+            except Exception:
+                text = None
+            if text and len(text) > 100:
+                print(f"[ContentFetcher] Fetched abstract from {name}: {doi[:30]}...")
+                return text[:5000]
 
         try:
             doi_url = f"https://doi.org/{doi}"

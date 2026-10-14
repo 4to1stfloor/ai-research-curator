@@ -1,5 +1,6 @@
 """RSS feed parser for journal papers."""
 
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 from time import mktime
@@ -31,14 +32,24 @@ JOURNAL_RSS_FEEDS = {
     "Cell Stem Cell": "https://www.cell.com/cell-stem-cell/current.rss",
     "Molecular Cell": "https://www.cell.com/molecular-cell/current.rss",
 
-    # BMC journals
+    # BMC journals. Springer currently serves a bot-check HTML page instead
+    # of these feeds (2026-10-14); _fetch_feed detects that and these journals
+    # are then covered by the PubMed search alone.
     "Genome Biology": "https://genomebiology.biomedcentral.com/articles/most-recent/rss.xml",
     "BMC Genomics": "https://bmcgenomics.biomedcentral.com/articles/most-recent/rss.xml",
     "BMC Bioinformatics": "https://bmcbioinformatics.biomedcentral.com/articles/most-recent/rss.xml",
 
-    # Oxford journals - direct RSS
-    "Nucleic Acids Research": "https://academic.oup.com/nar/rss/advanceAccess",
-    "Bioinformatics": "https://academic.oup.com/bioinformatics/rss/advanceAccess",
+    # Oxford journals. The old /<journal>/rss/advanceAccess paths 404 since
+    # OUP moved feeds to /rss/site_<id>/... (found 2026-10-14). Advance Access
+    # carries new papers first; the current-issue feed catches the rest.
+    "Nucleic Acids Research": [
+        "https://academic.oup.com/rss/site_5127/advanceAccess_3091.xml",
+        "https://academic.oup.com/rss/site_5127/3091.xml",
+    ],
+    "Bioinformatics": [
+        "https://academic.oup.com/rss/site_5139/advanceAccess_3001.xml",
+        "https://academic.oup.com/rss/site_5139/3001.xml",
+    ],
 
     # PLOS journals (always open access)
     "PLOS Biology": "https://journals.plos.org/plosbiology/feed/atom",
@@ -80,13 +91,18 @@ class RSSFeedSearcher:
                 doi = entry["dc_identifier"]
             elif "prism_doi" in entry:
                 doi = entry["prism_doi"]
-            # Try to extract from link
-            elif "link" in entry:
-                link = entry["link"]
-                if "doi.org/" in link:
-                    doi = link.split("doi.org/")[-1]
-                elif "/doi/" in link:
-                    doi = link.split("/doi/")[-1].split("?")[0]
+            # Try to extract from link / Atom id. PLOS links look like
+            # .../article?id=10.1371/journal.pbio.3003xxx, which the old
+            # "doi.org/" / "/doi/" checks missed, leaving PLOS papers without
+            # a DOI (no dedup against PubMed, no DOI-based fetching).
+            if not doi:
+                for src in (entry.get("link", ""), entry.get("id", "")):
+                    m = re.search(r'(10\.\d{4,9}/[^\s?&#"<>]+)', src or "")
+                    if m:
+                        doi = m.group(1).rstrip("/.")
+                        break
+            if doi:
+                doi = re.sub(r'^(?:doi:|https?://(?:dx\.)?doi\.org/)', '', doi.strip(), flags=re.I)
 
             # URL
             url = entry.get("link", "")
@@ -188,7 +204,10 @@ class RSSFeedSearcher:
     def _strip_html(self, text: str) -> str:
         """Remove HTML tags from text."""
         import re
-        clean = re.sub(r'<[^>]+>', '', text)
+        # Block-level tags become spaces so "<h2>Abstract</h2><p>Text" does
+        # not fuse into "AbstractText" (OUP feeds); inline tags vanish.
+        clean = re.sub(r'</?(?:p|div|h[1-6]|br|li|ul|ol|section|span class="[^"]*title[^"]*")[^>]*>', ' ', text, flags=re.I)
+        clean = re.sub(r'<[^>]+>', '', clean)
         clean = re.sub(r'\s+', ' ', clean)
         return clean.strip()
 
@@ -218,6 +237,17 @@ class RSSFeedSearcher:
         # Pattern: "doi:10.xxxx/..." at the start
         abstract = re.sub(r'^doi:\S+\s*', '', abstract)
 
+        # Science/Science Advances feeds put only "Volume 12, Issue 41,
+        # October 2026." in the description. That is not an abstract; leave it
+        # empty so the processing step fetches the real one.
+        if re.fullmatch(r'\s*Volume\s+\d+,\s*Issue\s+\d+,?[^.]{0,30}\.?\s*', abstract or ''):
+            return ""
+
+        # Leading "Abstract" heading (OUP), plus Bioinformatics' first
+        # structured-abstract label ("Motivation"/"Summary").
+        abstract = re.sub(r'^\s*Abstract\b[:.]?\s*', '', abstract, flags=re.I)
+        abstract = re.sub(r'^\s*(?:Motivation|Summary)\s+(?=[A-Z])', '', abstract)
+
         return abstract.strip()
 
     def _matches_keywords(self, paper: Paper, keywords: list[str]) -> bool:
@@ -236,6 +266,15 @@ class RSSFeedSearcher:
             # First try with requests to get content with proper encoding
             response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
+
+            # A bot wall answers 200 with an HTML page, which feedparser
+            # "parses" into zero entries plus a vague bozo warning. Say so.
+            ctype = response.headers.get("content-type", "").lower()
+            head = response.content[:200].lstrip().lower()
+            if "html" in ctype or head.startswith(b"<!doctype html") or head.startswith(b"<html"):
+                print(f"[RSS] {journal}: site returned a web page (bot check) instead of RSS "
+                      f"- this journal is covered by the PubMed search only")
+                return None
 
             # Parse the content directly
             feed = feedparser.parse(response.content)
@@ -291,18 +330,24 @@ class RSSFeedSearcher:
                 continue
 
             print(f"[RSS] Fetching {journal} feed...")
-            feed = self._fetch_feed(feed_url, journal)
+            urls = feed_url if isinstance(feed_url, list) else [feed_url]
+            entries = []
+            for u in urls:
+                feed = self._fetch_feed(u, journal)
+                if feed is None:
+                    continue
+                if feed.bozo and not feed.entries:
+                    print(f"[RSS] {journal}: feed could not be parsed ({feed.get('bozo_exception')!r:.80})")
+                    continue
+                entries.extend(feed.entries)
 
-            if feed is None:
+            if not entries:
                 print(f"[RSS] Failed to fetch {journal} feed")
                 failed_feeds += 1
                 continue
 
-            if feed.bozo:  # Feed parsing error
-                print(f"[RSS] Warning: {journal} feed had parsing issues, attempting to use partial data")
-
             entry_count = 0
-            for entry in feed.entries:
+            for entry in entries:
                 paper = self._parse_entry(entry, journal)
                 if paper is None:
                     continue
