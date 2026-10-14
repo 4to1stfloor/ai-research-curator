@@ -125,3 +125,85 @@ def is_non_research_type(publisher_type: str) -> bool:
     if norm in NATURE_RESEARCH_TYPES:
         return False
     return norm in NATURE_NON_RESEARCH_TYPES
+
+
+# ---------------------------------------------------------------------------
+# Generic checks that work for publishers without a dc.type tag (Cell Press,
+# Elsevier, AACR, ...). Cell Press "Preview" pieces are labeled plain
+# "Journal Article" by both PubMed and Crossref (2026-10-14: a 3-page Cancer
+# Cell Preview went into the report as paper #3), so we look at what the
+# article physically is: its page span, and the type label printed at the top
+# of its first PDF page.
+# ---------------------------------------------------------------------------
+
+# Labels publishers print as the first line of a non-research PDF.
+PDF_NON_RESEARCH_LABELS = {
+    "preview", "previews", "commentary", "perspective", "perspectives",
+    "review", "minireview", "editorial", "correspondence", "mattersarising",
+    "voices", "spotlight", "forum", "essay", "qa", "qanda", "primer",
+    "newsandviews", "newsviews", "comment", "viewpoint", "opinion",
+    "highlight", "researchhighlight", "erratum", "correction", "retraction",
+    "leadingedge", "snapshot", "outlook", "focus",
+}
+
+# Short-format research types we must NOT exclude even though they are short.
+PDF_RESEARCH_LABELS = {
+    "article", "researcharticle", "report", "shortarticle", "letter",
+    "resource", "clinicalandtranslationalreport", "brief report",
+}
+
+MAX_NON_RESEARCH_PAGES = 3
+
+
+def crossref_page_count(doi: str, mailto: Optional[str] = None) -> Optional[int]:
+    """Page span from Crossref ("1921-1923" -> 3), or None if unknown.
+
+    Article-number style journals (PLOS e1014041, eLife, NAR gkag964) have no
+    page range and return None, so they are never affected.
+    """
+    if not doi:
+        return None
+    import requests
+    doi = re.sub(r"^doi:\s*", "", doi.strip(), flags=re.IGNORECASE)
+    try:
+        params = {"mailto": mailto} if mailto else None
+        r = requests.get(f"https://api.crossref.org/works/{doi}", params=params, timeout=15)
+        if r.status_code != 200:
+            return None
+        page = (r.json().get("message") or {}).get("page") or ""
+    except Exception:
+        return None
+    m = re.fullmatch(r"\s*(\d+)\s*[-–]\s*(\d+)\s*", page)
+    if not m:
+        return None
+    first, last = int(m.group(1)), int(m.group(2))
+    if last < first:
+        return None
+    return last - first + 1
+
+
+def pdf_article_type_label(pdf_path: str) -> Optional[str]:
+    """Return the non-research label printed atop page 1, or None.
+
+    Cell Press / Elsevier PDFs start with the article type on its own line
+    ("Preview", "Commentary", "Review"...). Only the first few short lines are
+    checked so a word in the title or abstract cannot trigger it.
+    """
+    try:
+        import fitz
+        with fitz.open(pdf_path) as doc:
+            if len(doc) == 0:
+                return None
+            text = doc[0].get_text()
+    except Exception:
+        return None
+    for line in text.splitlines()[:4]:
+        line = line.strip()
+        if not line or len(line) > 40:
+            continue
+        norm = _normalize(line)
+        if norm in PDF_RESEARCH_LABELS:
+            return None
+        if norm in PDF_NON_RESEARCH_LABELS:
+            return line
+    return None

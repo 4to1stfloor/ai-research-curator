@@ -288,6 +288,143 @@ class BrowserLibraryProxy:
             display.stop()
 
     # -----------------------------------------------------------------
+    # Generic publisher page → PDF (Cloudflare-protected OA sites)
+    # -----------------------------------------------------------------
+    # Publishers whose site answers scripted requests with 403 but serves a
+    # real browser fine. Maps DOI prefix -> CSS selector list for the PDF link.
+    BROWSER_PDF_PUBLISHERS = {
+        # Oxford Academic (NAR, Bioinformatics, NAR Cancer, ...)
+        "10.1093/": ["a.article-pdfLink", "a[href*='/article-pdf/']"],
+    }
+
+    @classmethod
+    def supports_publisher_page(cls, doi: str) -> bool:
+        return bool(doi) and any(doi.startswith(p) for p in cls.BROWSER_PDF_PUBLISHERS)
+
+    def download_pdf_from_publisher_page(self, doi: str, dest: Path, max_attempts: int = 2) -> bool:
+        """Open the article in a real browser and download its PDF.
+
+        Oxford Academic sits behind a bot wall that returns 403 to requests and
+        to the library proxy's plain HTTP path (2026-10-14: NAR paper shipped
+        with no figures because neither the PDF nor the figure page could be
+        fetched). A non-headless Chrome inside Xvfb gets through. First try
+        the open-access site directly; if no PDF link shows up (subscription
+        title), retry through the library proxy login.
+        """
+        if not self.supports_publisher_page(doi):
+            return False
+        for attempt in range(1, max_attempts + 1):
+            via_proxy = attempt > 1
+            if via_proxy:
+                time.sleep(random.uniform(20, 40))
+            if self._publisher_page_once(doi, dest, via_proxy=via_proxy):
+                return True
+        return False
+
+    def _publisher_page_once(self, doi: str, dest: Path, via_proxy: bool) -> bool:
+        if not self.is_available():
+            print("[Browser-PDF] Not available (missing Xvfb/Chrome/selenium)")
+            return False
+
+        from pyvirtualdisplay import Display
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+
+        selectors = next(v for k, v in self.BROWSER_PDF_PUBLISHERS.items() if doi.startswith(k))
+
+        for f in self.download_dir.iterdir():
+            if f.is_file():
+                f.unlink()
+
+        display = Display(visible=False, size=(1920, 1080))
+        display.start()
+        driver = None
+        try:
+            opts = Options()
+            opts.binary_location = self.chrome_binary
+            opts.add_argument("--no-sandbox")
+            opts.add_argument("--ignore-certificate-errors")
+            opts.add_argument("--disable-blink-features=AutomationControlled")
+            opts.add_argument("--window-size=1920,1080")
+            opts.add_experimental_option("prefs", {
+                "download.default_directory": str(self.download_dir),
+                "download.prompt_for_download": False,
+                "plugins.always_open_pdf_externally": True,
+            })
+            driver = webdriver.Chrome(options=opts)
+            driver.execute_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            )
+            driver.execute_cdp_cmd(
+                "Page.setDownloadBehavior",
+                {"behavior": "allow", "downloadPath": str(self.download_dir)},
+            )
+
+            if via_proxy:
+                driver.get(f"{self.proxy_base}/link.n2s?url=https://doi.org/{doi}")
+                WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.NAME, "uid")))
+                self._pause()
+                self._type_like_human(driver.find_element(By.NAME, "uid"), self.user_id)
+                self._pause(0.3, 0.7)
+                self._type_like_human(driver.find_element(By.NAME, "upw"), self.password)
+                self._pause(0.5, 1.0)
+                driver.execute_script("document.forms.LOGIN.submit()")
+            else:
+                driver.get(f"https://doi.org/{doi}")
+
+            # Wait out the bot-check interstitial ("Just a moment...") until a
+            # PDF link is present on the real article page.
+            css = ", ".join(selectors)
+            try:
+                WebDriverWait(driver, 90).until(
+                    lambda d: d.find_elements(By.CSS_SELECTOR, css)
+                )
+            except Exception:
+                print(f"[Browser-PDF] No PDF link on {driver.current_url[:100]} "
+                      f"(title: {driver.title[:60]!r}, via_proxy={via_proxy})")
+                return False
+
+            print(f"[Browser-PDF] On article page: {driver.current_url[:100]}")
+            time.sleep(random.uniform(3.0, 6.0))  # read a bit, like a person
+
+            link = driver.find_elements(By.CSS_SELECTOR, css)[0]
+            pdf_href = link.get_attribute("href")
+            # Opening the PDF URL directly is more reliable than click(): OUP's
+            # link opens a new tab with an inline viewer.
+            driver.get(pdf_href)
+            print(f"[Browser-PDF] Requested PDF: {pdf_href[:120]}")
+
+            for elapsed in range(1, 181):
+                time.sleep(1)
+                pdfs = list(self.download_dir.glob("*.pdf"))
+                partials = list(self.download_dir.glob("*.crdownload"))
+                if pdfs and not partials:
+                    src = pdfs[0]
+                    with open(src, "rb") as fh:
+                        if fh.read(4) != b"%PDF":
+                            print("[Browser-PDF] Downloaded file isn't a PDF")
+                            return False
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(src), str(dest))
+                    print(f"[Browser-PDF] Downloaded: {dest.name} ({dest.stat().st_size // 1024} KB)")
+                    return True
+            print("[Browser-PDF] Download timeout after 180s")
+            return False
+        except Exception as e:
+            print(f"[Browser-PDF] Error: {e!r}")
+            return False
+        finally:
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+            display.stop()
+
+    # -----------------------------------------------------------------
     # DOI → PII resolution for Cell/Elsevier
     # -----------------------------------------------------------------
     @staticmethod

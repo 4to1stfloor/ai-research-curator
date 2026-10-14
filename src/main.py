@@ -60,6 +60,10 @@ class PaperDigestPipeline:
         history_path = resolve_path(self.config.storage.history_file, self.base_dir)
         self.history_manager = PaperHistoryManager(history_path)
         self.dedup_checker = DeduplicationChecker(self.history_manager)
+        # Non-research pieces found after search (page span / PDF label),
+        # remembered in history so they are not re-downloaded next week.
+        self._excluded_non_research: list[Paper] = []
+        self._reserve_papers: list[Paper] = []
 
         # Searchers
         self.pubmed_searcher = PubMedSearcher(email=self.env_config.pubmed_email)
@@ -388,7 +392,29 @@ class PaperDigestPipeline:
             console.print(f"[yellow]Open access only: {len(open_access_papers)} papers[/yellow]")
             unique_papers = open_access_papers
 
-        # Limit to max_papers
+        # Page-span check (Crossref). Cell Press Previews/Commentaries are
+        # labeled plain "Journal Article" everywhere, but they are 2-3 printed
+        # pages. Checked lazily in rank order so we only query as many DOIs as
+        # we need (max_papers + a few reserves for the PDF-label check later).
+        from .search.article_type_checker import (
+            crossref_page_count, MAX_NON_RESEARCH_PAGES,
+        )
+        wanted = max_papers + 5
+        checked = []
+        for p in unique_papers:
+            if len(checked) >= wanted:
+                break
+            pages = crossref_page_count(p.doi, mailto=self.env_config.pubmed_email) if p.doi else None
+            if pages is not None and pages <= MAX_NON_RESEARCH_PAGES:
+                console.print(f"[yellow]Excluded ({pages}-page piece, not a research article): {p.title[:60]}...[/yellow]")
+                self._excluded_non_research.append(p)
+                continue
+            checked.append(p)
+        unique_papers = checked
+
+        # Limit to max_papers; keep the rest as reserves for backfilling when a
+        # downloaded PDF turns out to be a non-research piece.
+        self._reserve_papers = unique_papers[max_papers:]
         if len(unique_papers) > max_papers:
             unique_papers = unique_papers[:max_papers]
             console.print(f"[yellow]Limited to {max_papers} papers[/yellow]")
@@ -400,6 +426,35 @@ class PaperDigestPipeline:
             console.print(f"[yellow]Open access: {oa_count} | Abstract only: {non_oa_count}[/yellow]")
 
         return unique_papers
+
+    def _drop_non_research_pdfs(self, papers: list[Paper], max_papers: int) -> list[Paper]:
+        """Remove papers whose PDF is labeled as a non-research piece; backfill."""
+        from .search.article_type_checker import pdf_article_type_label
+
+        def _label(p: Paper):
+            return pdf_article_type_label(str(p.local_pdf_path)) if p.local_pdf_path else None
+
+        kept = []
+        for p in papers:
+            label = _label(p)
+            if label:
+                console.print(f"[yellow]Excluded (PDF labeled '{label}', not a research article): {p.title[:60]}...[/yellow]")
+                self._excluded_non_research.append(p)
+            else:
+                kept.append(p)
+
+        while len(kept) < max_papers and self._reserve_papers:
+            cand = self._reserve_papers.pop(0)
+            console.print(f"[cyan]Backfilling with: {cand.title[:60]}...[/cyan]")
+            self.download_papers([cand])
+            label = _label(cand)
+            if label:
+                console.print(f"[yellow]Excluded (PDF labeled '{label}'): {cand.title[:60]}...[/yellow]")
+                self._excluded_non_research.append(cand)
+                continue
+            kept.append(cand)
+
+        return kept
 
     def download_papers(self, papers: list[Paper]) -> list[Paper]:
         """Download PDFs for open access papers (or non-OA if library proxy is set)."""
@@ -958,6 +1013,18 @@ flowchart TD
 
         # 3. Download
         papers = self.download_papers(papers)
+
+        # 3b. Drop non-research pieces that only reveal themselves in the PDF
+        # (Cell Press prints "Preview"/"Commentary" atop page 1) and backfill
+        # from the reserve list so the report still has max_papers entries.
+        papers = self._drop_non_research_pdfs(papers, max_papers)
+
+        # Remember every excluded piece so next week's search skips it.
+        if self._excluded_non_research:
+            seen = set()
+            excluded = [p for p in self._excluded_non_research
+                        if not ((p.doi or p.title) in seen or seen.add(p.doi or p.title))]
+            self.dedup_checker.save_to_history(excluded)
 
         # 4. Process with AI
         processed, body_texts, diagrams = self.process_papers(papers)

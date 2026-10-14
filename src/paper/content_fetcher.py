@@ -466,8 +466,16 @@ class FigureFetcher:
         """
         try:
             W, H = page.rect.width, page.rect.height
-            header_y = H * 0.08
             footer_y = H * 0.95
+            # Header band = just below the running-head text, wherever it is.
+            # A fixed 8% band cut off eLife figures that start at y=60 of 792
+            # (2026-10-14), turning every eLife figure into a whole page.
+            # Running heads START in the top 10% and stay short; CellPress's
+            # "Article" head runs y=49..82 of 783, i.e. it ends past 10%.
+            head_blocks = [b for b in page.get_text("blocks")
+                           if b[1] < H * 0.1 and b[3] < H * 0.15]
+            header_y = (max(b[3] for b in head_blocks) + 2) if head_blocks else H * 0.04
+            top_edge = H * 0.02  # decorative bars hanging from the page top
 
             # Locate the caption block so we know which side of it the figure is on.
             caption_rect = None
@@ -483,10 +491,15 @@ class FigureFetcher:
             # Publisher running-heads often include a tall colour bar hanging
             # from y=0 down past the band boundary; testing "entirely above the
             # band" let it through and dragged the crop up to the page top.
+            def _in_margin(r):
+                return (r.y0 < top_edge          # hangs from the page top (CellPress bar)
+                        or r.y1 <= header_y      # sits inside the running head
+                        or r.y0 >= footer_y)     # page number / footer
+
             rects = []
             for info in page.get_image_info():
                 r = fitz.Rect(info["bbox"])
-                if r.y0 < header_y or r.y0 >= footer_y:
+                if _in_margin(r):
                     continue
                 if r.width < 8 or r.height < 8:
                     continue
@@ -495,7 +508,7 @@ class FigureFetcher:
                 r = d.get("rect")
                 if r is None or r.is_empty:
                     continue
-                if r.y0 < header_y or r.y0 >= footer_y:
+                if _in_margin(r):
                     continue
                 # Ignore the caption's own rules/underlines if any
                 if caption_rect is not None and r.intersects(caption_rect) and r.height < 3:
@@ -1000,70 +1013,101 @@ class PaperContentFetcher:
         return figures
 
     def _fetch_elife_figures(self, doi: str, paper_title: str) -> list[dict]:
-        """Fetch figures from eLife using IIIF image server."""
+        """Fetch figures + full legends from the official eLife API.
+
+        elifesciences.org answers scripted requests with an empty 406 (seen
+        2026-10-14), which dropped eLife papers to whole-page PDF renders. The
+        public API (api.elifesciences.org) returns every figure's label, title,
+        full panel-by-panel caption and IIIF image URI, so use that instead of
+        scraping the article page.
+        """
         figures = []
         paper_id = re.sub(r'[<>:"/\\|?*]', '', paper_title)[:50].replace(' ', '_')
         paper_dir = self.figures_dir / paper_id
         paper_dir.mkdir(exist_ok=True)
 
-        # Extract article ID from DOI (e.g., 10.7554/eLife.92991 -> 92991)
-        article_id = doi.split(".")[-1]
-
-        url = f"https://elifesciences.org/articles/{article_id}"
-        print(f"[eLife] Fetching figures from: {url}")
-
-        response = self.session.get(url, timeout=self.timeout)
-        if response.status_code != 200:
+        # 10.7554/eLife.110635 -> 110635 (also handles versioned 110635.4)
+        m = re.search(r'eLife\.(\d+)', doi, re.IGNORECASE)
+        if not m:
             return figures
+        article_id = m.group(1)
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        api_url = f"https://api.elifesciences.org/articles/{article_id}"
+        print(f"[eLife] Fetching figures from API: {api_url}")
+        try:
+            resp = requests.get(
+                api_url,
+                headers={"Accept": "application/vnd.elife.article-vor+json, "
+                                   "application/vnd.elife.article-poa+json"},
+                timeout=self.timeout,
+            )
+        except Exception as e:
+            print(f"[eLife] API error: {e}")
+            return figures
+        if resp.status_code != 200:
+            print(f"[eLife] API status {resp.status_code}")
+            return figures
+        data = resp.json()
 
-        # Find all figure elements with captioned-asset class
-        fig_elements = soup.find_all('figure', class_='captioned-asset')
-        print(f"[eLife] Found {len(fig_elements)} figure elements")
+        blocks = []
 
-        seen_nums = set()
-        for fig in fig_elements:
-            # Get img and extract figure number from src URL
-            img = fig.find('img')
-            if not img:
-                continue
+        def _walk(o):
+            if isinstance(o, dict):
+                if o.get("type") == "figure":
+                    blocks.append(o)
+                for v in o.values():
+                    _walk(v)
+            elif isinstance(o, list):
+                for v in o:
+                    _walk(v)
 
-            img_src = img.get('src', '')
-            # Extract figure number from URL pattern: elife-92991-fig1-v1.tif
-            fig_num_match = re.search(r'elife-\d+-fig(\d+)', img_src)
-            if not fig_num_match:
-                continue
+        _walk(data.get("body", []))
 
-            fig_num = fig_num_match.group(1)
-            if fig_num in seen_nums:
-                continue
-            seen_nums.add(fig_num)
+        def _plain(html_text: str) -> str:
+            return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', html_text or '')).strip()
 
-            # Build IIIF URL for full-size image (1500px width)
-            img_url = f"https://iiif.elifesciences.org/lax:{article_id}%2Felife-{article_id}-fig{fig_num}-v1.tif/full/1500,/0/default.jpg"
+        seen = set()
+        for block in blocks:
+            for asset in block.get("assets", []):
+                asset_id = asset.get("id", "")
+                # Main figures only: fig1, fig2 ... (skip supplements fig1s1)
+                fm = re.fullmatch(r'fig(\d+)', asset_id)
+                if not fm or asset.get("type") not in (None, "image"):
+                    continue
+                fig_num = fm.group(1)
+                if fig_num in seen:
+                    continue
+                seen.add(fig_num)
 
-            # Get caption
-            caption = ""
-            caption_elem = fig.find('figcaption')
-            if caption_elem:
-                caption = caption_elem.get_text(strip=True)[:500]
+                title = _plain(asset.get("title", ""))
+                caption_paras = [
+                    _plain(c.get("text", ""))
+                    for c in asset.get("caption", []) or []
+                    if c.get("type") == "paragraph"
+                ]
+                caption = " ".join(x for x in [title] + caption_paras if x)
 
-            # Download figure
-            filepath = paper_dir / f"fig_{fig_num}.jpg"
+                uri = (asset.get("image") or {}).get("uri")
+                if not uri:
+                    continue
+                img_url = f"{uri}/full/1500,/0/default.jpg"
+                filepath = paper_dir / f"fig_{fig_num}.jpg"
+                try:
+                    img = requests.get(img_url, timeout=60)
+                except Exception as e:
+                    print(f"[eLife] Image error for Figure {fig_num}: {e}")
+                    continue
+                if img.status_code == 200 and len(img.content) > 1000:
+                    filepath.write_bytes(img.content)
+                    figures.append({
+                        "figure_num": fig_num,
+                        "path": str(filepath),
+                        "caption": caption[:3000],
+                        "url": img_url,
+                    })
+                    print(f"[eLife] Downloaded Figure {fig_num} (legend {len(caption)} chars)")
 
-            img_response = self.session.get(img_url, timeout=30)
-            if img_response.status_code == 200 and len(img_response.content) > 1000:
-                with open(filepath, 'wb') as f:
-                    f.write(img_response.content)
-                figures.append({
-                    "figure_num": fig_num,
-                    "path": str(filepath),
-                    "caption": caption,
-                    "url": img_url
-                })
-                print(f"[eLife] Downloaded Figure {fig_num}")
-
+        figures.sort(key=lambda f: int(f["figure_num"]))
         return figures
 
     def _fetch_bmc_figures(self, doi: str, paper_title: str) -> list[dict]:

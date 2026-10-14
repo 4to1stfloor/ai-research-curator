@@ -302,11 +302,19 @@ class PaperDownloader:
         # Requires Xvfb + Chromium + selenium installed; falls through silently
         # otherwise.
         if self.library_proxy_browser is not None and paper.doi:
-            print(f"Trying library proxy (browser): {paper.doi}")
-            if self.library_proxy_browser.download_pdf_from_doi(paper.doi, output_path):
-                paper.local_pdf_path = str(output_path)
-                print(f"Downloaded via browser proxy: {paper.title[:50]}...")
-                return str(output_path)
+            # Oxford Academic etc.: bot wall on the whole site, real browser OK.
+            if self.library_proxy_browser.supports_publisher_page(paper.doi):
+                print(f"Trying publisher page in browser: {paper.doi}")
+                if self.library_proxy_browser.download_pdf_from_publisher_page(paper.doi, output_path):
+                    paper.local_pdf_path = str(output_path)
+                    print(f"Downloaded via browser: {paper.title[:50]}...")
+                    return str(output_path)
+            elif self.library_proxy_browser.is_cell_or_elsevier_doi(paper.doi):
+                print(f"Trying library proxy (browser): {paper.doi}")
+                if self.library_proxy_browser.download_pdf_from_doi(paper.doi, output_path):
+                    paper.local_pdf_path = str(output_path)
+                    print(f"Downloaded via browser proxy: {paper.title[:50]}...")
+                    return str(output_path)
 
         print(f"Could not download: {paper.title[:50]}...")
         return None
